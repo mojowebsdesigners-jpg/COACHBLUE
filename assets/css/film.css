@@ -1,0 +1,162 @@
+/* ==========================================================================
+   Coach Blue — scroll-driven film
+   No copy, no chrome. The clip is the page; scroll position is the transport.
+   Palette carried over from the original site: mint #1DE9B6 on #0D1717.
+   ========================================================================== */
+
+:root {
+  --mint: #1DE9B6;
+  --ink:  #0D1717;
+
+  /* Scroll distance for the whole clip.
+     ~32 screens over 99s means an ordinary wheel scroll advances the film at
+     roughly natural speed, which is what keeps the speech intelligible. */
+  --track: 3200vh;
+}
+
+* { box-sizing: border-box; }
+
+html {
+  /* smooth-scroll would fight the transport — the scroll position IS the
+     playhead, and an interpolated position reads as drift */
+  scroll-behavior: auto;
+  background: var(--ink);
+}
+
+body {
+  margin: 0;
+  background: var(--ink);
+  overflow-x: clip;
+  -webkit-text-size-adjust: 100%;
+}
+
+.track { height: var(--track); position: relative; }
+
+.stage {
+  position: sticky;
+  top: 0;
+  height: 100svh;
+  overflow: hidden;
+  background: var(--ink);
+}
+
+/* The file is 16:9 with the portrait laid over a blurred fill, so `cover`
+   does the right thing at both ends: a wide screen sees the full 16:9, and a
+   phone in portrait crops the blurred edges away and lands back on the
+   original 9:16 framing. */
+#film {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  background: var(--ink);
+}
+
+/* Ultrawide guard: `cover` on a 21:9 screen would scale the 16:9 up enough to
+   crop the top and bottom off the frame, taking the burned-in captions with
+   them. Past 2:1 fall back to `contain` and let the ink show at the sides. */
+@media (min-aspect-ratio: 2/1) {
+  #film { object-fit: contain; }
+}
+
+.vignette {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(120% 90% at 50% 45%, transparent 55%, rgba(0, 0, 0, 0.42) 100%),
+    linear-gradient(to top, rgba(0, 0, 0, 0.34) 0%, transparent 22%);
+}
+
+/* ------------------------------------------------------------- progress -- */
+.bar {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.13);
+  pointer-events: none;
+}
+.bar i {
+  display: block;
+  height: 100%;
+  width: 100%;
+  background: var(--mint);
+  transform: scaleX(0);
+  transform-origin: left;
+  will-change: transform;
+}
+
+/* ---------------------------------------------------------------- sound -- */
+.sound {
+  position: absolute;
+  right: max(18px, env(safe-area-inset-right));
+  bottom: max(22px, env(safe-area-inset-bottom));
+  width: 46px;
+  height: 46px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.34);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: #fff;
+  cursor: pointer;
+  transition: border-color 0.3s ease, background 0.3s ease,
+              color 0.3s ease, transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.sound:hover { transform: scale(1.07); border-color: var(--mint); color: var(--mint); }
+.sound:focus-visible { outline: 2px solid var(--mint); outline-offset: 3px; }
+
+.ico { width: 21px; height: 21px; fill: currentColor; }
+.ico .stroke {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+}
+.ico-on { display: none; }
+.sound[aria-pressed="true"] { color: var(--mint); border-color: var(--mint); }
+.sound[aria-pressed="true"] .ico-off { display: none; }
+.sound[aria-pressed="true"] .ico-on  { display: block; }
+
+/* ------------------------------------------------------------------ cue -- */
+.cue {
+  position: absolute;
+  left: 50%;
+  bottom: 30px;
+  translate: -50% 0;
+  width: 22px;
+  height: 38px;
+  border: 1.5px solid rgba(255, 255, 255, 0.4);
+  border-radius: 12px;
+  pointer-events: none;
+  transition: opacity 0.6s ease, transform 0.6s ease;
+}
+.cue span {
+  position: absolute;
+  left: 50%;
+  top: 7px;
+  width: 3px;
+  height: 7px;
+  margin-left: -1.5px;
+  border-radius: 2px;
+  background: var(--mint);
+  animation: cue 1.9s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+}
+@keyframes cue {
+  0%   { opacity: 0; transform: translateY(0); }
+  25%  { opacity: 1; }
+  70%  { opacity: 0; transform: translateY(14px); }
+  100% { opacity: 0; transform: translateY(14px); }
+}
+.cue.gone { opacity: 0; transform: translate(0, 10px); }
+
+/* A still frame is a fair fallback when motion is unwelcome; the film simply
+   does not scrub. */
+@media (prefers-reduced-motion: reduce) {
+  .cue span { animation: none; opacity: 1; }
+}

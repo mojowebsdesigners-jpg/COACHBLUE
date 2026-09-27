@@ -1,0 +1,12 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "installCommand": "cd world && npm ci",
+  "buildCommand": "cd world && npm run build",
+  "outputDirectory": "world/dist",
+  "headers": [
+    {
+      "source": "/(models|video|tex|fonts|img)/(.*)",
+      "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }]
+    }
+  ]
+}

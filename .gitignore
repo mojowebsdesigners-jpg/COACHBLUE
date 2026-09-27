@@ -1,0 +1,15 @@
+# dependencies and build output
+node_modules/
+dist/
+dist-ssr/
+*.log
+.DS_Store
+.vercel
+
+# large working files kept locally (Blender sources, renders, raw video masters)
+world/raw/
+source-videos/
+assets/video/master/
+assets/models/
+*.blend
+*.blend1

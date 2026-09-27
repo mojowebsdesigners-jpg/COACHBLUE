@@ -1,0 +1,30 @@
+{
+  "clip1": {
+    "duration": 26.47,
+    "mp4_mb": 2.36
+  },
+  "clip2": {
+    "duration": 99.4,
+    "mp4_mb": 8.3
+  },
+  "clip3": {
+    "duration": 42.33,
+    "mp4_mb": 3.48
+  },
+  "clip4": {
+    "duration": 34.1,
+    "mp4_mb": 2.12
+  },
+  "clip5": {
+    "duration": 30.67,
+    "mp4_mb": 3.26
+  },
+  "clip6": {
+    "duration": 27.9,
+    "mp4_mb": 1.97
+  },
+  "scrub": {
+    "frames": 1,
+    "from": "clip1"
+  }
+}

@@ -1,0 +1,659 @@
+/* ==========================================================================
+   Coach Blue — revamp
+   Design tokens are lifted verbatim from the original Elementor kit so the
+   brand reads identically: mint #1DE9B6 on near-black, forma-djr-display for
+   display type, Inter for body copy.
+   ========================================================================== */
+
+/* --------------------------------------------------------------- 1. tokens */
+:root {
+  /* palette — from the original site's global kit */
+  --mint:        #1DE9B6;
+  --mint-deep:   #0A5240;
+  --ink:         #1C1C1C;
+  --ink-deep:    #0D1717;
+  --surface:     #242424;
+  --surface-2:   #2E2E2E;
+  --text:        #BEBEBE;
+  --muted:       #808080;
+  --muted-2:     #686868;
+  --line:        #BDBCBC;
+  --light:       #E1E1E1;
+  --light-2:     #EDEEEF;
+  --white:       #FFFFFF;
+
+  /* the original's translucent mint washes */
+  --mint-05:  rgba(29, 233, 182, 0.05);
+  --mint-08:  rgba(29, 233, 182, 0.08);
+  --mint-15:  rgba(29, 233, 182, 0.15);
+  --mint-30:  rgba(29, 233, 182, 0.30);
+  --ink-90:   rgba(28, 28, 28, 0.90);
+
+  /* type */
+  --display: "forma-djr-display", "Inter", system-ui, sans-serif;
+  --body:    "Inter", system-ui, -apple-system, sans-serif;
+
+  /* rhythm */
+  --gut: clamp(1.25rem, 4vw, 3rem);
+  --maxw: 1280px;
+  --radius: 14px;
+
+  /* motion */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-io:  cubic-bezier(0.65, 0, 0.35, 1);
+  --dur: 0.9s;
+}
+
+/* ---------------------------------------------------------------- 2. reset */
+*, *::before, *::after { box-sizing: border-box; }
+
+html {
+  scroll-behavior: smooth;
+  /* the sticky nav must not cover anchor targets */
+  scroll-padding-top: 84px;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--ink);
+  color: var(--text);
+  font-family: var(--body);
+  font-size: 1rem;
+  line-height: 1.6;
+  overflow-x: clip;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* while the splash is up the page must not scroll behind it */
+body.is-locked { overflow: hidden; }
+
+img, video, canvas, svg { display: block; max-width: 100%; }
+a { color: inherit; text-decoration: none; }
+button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+
+h1, h2, h3, h4 {
+  font-family: var(--display);
+  font-weight: 600;
+  color: var(--white);
+  line-height: 0.98;
+  letter-spacing: -0.02em;
+  margin: 0;
+  text-wrap: balance;
+}
+
+::selection { background: var(--mint); color: var(--ink); }
+
+/* keyboard focus stays visible everywhere */
+:focus-visible {
+  outline: 2px solid var(--mint);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+/* ------------------------------------------------------------- 3. skeleton */
+.wrap {
+  width: 100%;
+  max-width: var(--maxw);
+  margin-inline: auto;
+  padding-inline: var(--gut);
+}
+
+section { position: relative; }
+
+.section-pad { padding-block: clamp(5rem, 12vw, 10rem); }
+
+/* the small mint label above every section heading — the original's
+   "accent" typography: 500 weight, 0.18rem tracking, uppercase */
+.eyebrow {
+  font-family: var(--display);
+  font-weight: 500;
+  font-size: 0.8125rem;
+  letter-spacing: 0.18rem;
+  text-transform: uppercase;
+  color: var(--mint);
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+}
+.eyebrow::before {
+  content: "";
+  width: 28px;
+  height: 1px;
+  background: var(--mint);
+  flex: none;
+}
+
+.h-xl { font-size: clamp(2.75rem, 8.5vw, 6.5rem); }
+.h-lg { font-size: clamp(2.25rem, 5.5vw, 4rem); }
+.h-md { font-size: clamp(1.75rem, 3.2vw, 2.6rem); }
+
+.lede {
+  font-size: clamp(1rem, 1.35vw, 1.125rem);
+  line-height: 1.7;
+  color: var(--text);
+  max-width: 62ch;
+}
+
+.mint { color: var(--mint); }
+
+/* ---------------------------------------------------------------- 4. button */
+.btn {
+  --btn-bg: var(--mint);
+  --btn-fg: var(--ink);
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 1rem 2rem;
+  border-radius: 100px;
+  background: var(--btn-bg);
+  color: var(--btn-fg);
+  font-family: var(--display);
+  font-weight: 600;
+  font-size: 0.95rem;
+  letter-spacing: 0.02em;
+  overflow: hidden;
+  isolation: isolate;
+  transition: transform 0.4s var(--ease-out), box-shadow 0.4s var(--ease-out);
+}
+/* a mint glow that grows from the centre on hover */
+.btn::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: var(--white);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 0.5s var(--ease-out);
+}
+.btn:hover { transform: translateY(-3px); box-shadow: 0 12px 34px -10px var(--mint-30); }
+.btn:hover::after { transform: scaleX(1); }
+.btn .arw { transition: transform 0.4s var(--ease-out); }
+.btn:hover .arw { transform: translateX(4px); }
+
+.btn-ghost {
+  --btn-bg: transparent;
+  --btn-fg: var(--white);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+}
+.btn-ghost::after { background: var(--mint); }
+.btn-ghost:hover { color: var(--ink); border-color: var(--mint); }
+
+/* ============================================================== 5. splash ==
+   Logo strokes draw themselves, the mark fills, then the whole panel
+   shatters into shards that spin away and reveal the page beneath.
+   ========================================================================== */
+#splash {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: var(--ink-deep);
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+#splash.gone { pointer-events: none; }
+
+.splash-inner {
+  display: grid;
+  place-items: center;
+  gap: 1.5rem;
+  transition: opacity 0.35s ease, transform 0.5s var(--ease-out);
+}
+#splash.cracking .splash-inner { opacity: 0; transform: scale(1.06); }
+
+#splash svg { width: min(210px, 46vw); height: auto; overflow: visible; }
+
+/* each contour is drawn by retracting its dash offset, then filled */
+#splash .lp {
+  stroke: var(--mint);
+  stroke-width: 1.6;
+  fill: var(--mint);
+  fill-opacity: 0;
+  stroke-dasharray: var(--len);
+  stroke-dashoffset: var(--len);
+  transition: stroke-dashoffset 0.85s var(--ease-io) var(--d, 0s),
+              fill-opacity 0.4s ease calc(var(--d, 0s) + 0.6s);
+}
+#splash.drawing .lp { stroke-dashoffset: 0; fill-opacity: 1; }
+
+.splash-cap {
+  font-family: var(--display);
+  font-size: 0.75rem;
+  letter-spacing: 0.34rem;
+  text-transform: uppercase;
+  color: var(--muted);
+  opacity: 0;
+  transition: opacity 0.5s ease 1.1s;
+}
+#splash.drawing .splash-cap { opacity: 1; }
+
+/* the shatter layer — shards are generated in JS */
+.shards { position: absolute; inset: 0; pointer-events: none; }
+.shard {
+  position: absolute;
+  inset: 0;
+  background: var(--ink-deep);
+  /* a hairline seam so the breaks read as cracks, not just cuts */
+  box-shadow: inset 0 0 0 0.5px rgba(29, 233, 182, 0.22);
+  will-change: transform, opacity;
+  transition: transform 1.15s cubic-bezier(0.3, 0, 0.2, 1),
+              opacity 1.15s ease;
+}
+#splash.cracking .shard {
+  transform: translate3d(var(--tx), var(--ty), 0) rotate(var(--rot)) scale(var(--sc));
+  opacity: 0;
+}
+
+/* ================================================================= 6. nav == */
+#nav {
+  position: fixed;
+  inset: 0 0 auto 0;
+  z-index: 900;
+  padding-block: 1.1rem;
+  transition: background 0.4s ease, backdrop-filter 0.4s ease,
+              padding 0.4s ease, border-color 0.4s ease;
+  border-bottom: 1px solid transparent;
+}
+#nav.stuck {
+  background: var(--ink-90);
+  backdrop-filter: blur(14px) saturate(1.4);
+  -webkit-backdrop-filter: blur(14px) saturate(1.4);
+  padding-block: 0.7rem;
+  border-bottom-color: rgba(255, 255, 255, 0.07);
+}
+.nav-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2rem;
+}
+.nav-logo { display: flex; align-items: center; gap: 0.7rem; }
+.nav-logo img { width: 38px; height: auto; }
+.nav-logo span {
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: 0.95rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--white);
+}
+.nav-links { display: flex; gap: 1.9rem; align-items: center; }
+.nav-links a {
+  position: relative;
+  font-size: 0.875rem;
+  color: var(--text);
+  padding-block: 4px;
+  transition: color 0.3s ease;
+}
+.nav-links a::after {
+  content: "";
+  position: absolute;
+  left: 0; bottom: 0;
+  width: 100%; height: 1.5px;
+  background: var(--mint);
+  transform: scaleX(0);
+  transform-origin: right;
+  transition: transform 0.4s var(--ease-out);
+}
+.nav-links a:hover { color: var(--white); }
+.nav-links a:hover::after { transform: scaleX(1); transform-origin: left; }
+
+.nav-cta { padding: 0.65rem 1.4rem; font-size: 0.85rem; }
+
+/* burger */
+.burger { display: none; width: 26px; height: 18px; position: relative; }
+.burger i {
+  position: absolute; left: 0;
+  width: 100%; height: 2px;
+  background: var(--white);
+  border-radius: 2px;
+  transition: transform 0.4s var(--ease-out), opacity 0.3s ease;
+}
+.burger i:nth-child(1) { top: 0; }
+.burger i:nth-child(2) { top: 8px; }
+.burger i:nth-child(3) { top: 16px; }
+body.menu-open .burger i:nth-child(1) { transform: translateY(8px) rotate(45deg); }
+body.menu-open .burger i:nth-child(2) { opacity: 0; }
+body.menu-open .burger i:nth-child(3) { transform: translateY(-8px) rotate(-45deg); }
+
+/* mobile drawer */
+#drawer {
+  position: fixed;
+  inset: 0;
+  z-index: 890;
+  background: var(--ink-deep);
+  display: grid;
+  place-content: center;
+  gap: 0.4rem;
+  text-align: center;
+  clip-path: circle(0% at 100% 0);
+  visibility: hidden;
+  transition: clip-path 0.7s var(--ease-io), visibility 0s linear 0.7s;
+}
+body.menu-open #drawer {
+  clip-path: circle(150% at 100% 0);
+  visibility: visible;
+  transition: clip-path 0.7s var(--ease-io), visibility 0s;
+}
+#drawer a {
+  font-family: var(--display);
+  font-weight: 600;
+  font-size: clamp(1.8rem, 7vw, 3rem);
+  color: var(--white);
+  padding-block: 0.35rem;
+  opacity: 0;
+  transform: translateY(18px);
+  transition: opacity 0.5s ease, transform 0.5s var(--ease-out);
+}
+body.menu-open #drawer a { opacity: 1; transform: none; transition-delay: calc(0.18s + var(--i) * 0.06s); }
+#drawer a:hover { color: var(--mint); }
+
+/* ================================================================ 7. hero == */
+#hero {
+  position: relative;
+  min-height: 100svh;
+  display: flex;
+  align-items: center;
+  padding-top: 96px;
+  overflow: hidden;
+}
+
+/* the muted video wall sitting behind the headline */
+.hero-wall {
+  position: absolute;
+  inset: -6% -2%;
+  z-index: 0;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  opacity: 0.26;
+  filter: grayscale(0.45) contrast(1.05);
+}
+.hero-wall video, .hero-wall img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 10px;
+  will-change: transform;
+}
+/* alternate columns drift opposite ways as you scroll (set in JS) */
+.hero-wall .wall-col {
+  display: grid;
+  gap: 10px;
+  will-change: translate;
+}
+
+.hero-veil {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background:
+    radial-gradient(120% 80% at 20% 40%, rgba(28,28,28,0.55) 0%, rgba(28,28,28,0.92) 55%, var(--ink) 100%),
+    linear-gradient(to bottom, transparent 55%, var(--ink) 100%);
+}
+
+.hero-grid {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: 1.15fr 0.85fr;
+  gap: clamp(1.5rem, 4vw, 4rem);
+  align-items: center;
+  width: 100%;
+}
+
+.hero-h1 { font-size: clamp(3rem, 9vw, 7rem); font-weight: 600; letter-spacing: -0.03em; }
+.hero-h1 .l2 { display: block; color: var(--mint); }
+
+.hero-copy { margin: 1.6rem 0 2.4rem; max-width: 46ch; }
+
+.hero-actions { display: flex; flex-wrap: wrap; gap: 0.9rem; align-items: center; }
+
+/* coach cut-out, revealed by a rising clip-path mask */
+.hero-figure { position: relative; justify-self: center; }
+.hero-figure img {
+  /* the cut-out is 835x2017 — size it by HEIGHT or it runs off the fold */
+  height: min(74vh, 820px);
+  width: auto;
+  max-width: 100%;
+  filter: drop-shadow(0 40px 60px rgba(0, 0, 0, 0.65));
+  will-change: transform;
+}
+/* a mint halo behind him */
+.hero-figure::before {
+  content: "";
+  position: absolute;
+  left: 50%; top: 46%;
+  width: 116%; aspect-ratio: 1;
+  translate: -50% -50%;
+  background: radial-gradient(circle, var(--mint-15) 0%, transparent 62%);
+  z-index: -1;
+}
+
+/* scroll hint */
+.scroll-hint {
+  position: absolute;
+  left: 50%; bottom: 26px;
+  translate: -50% 0;
+  z-index: 3;
+  display: grid;
+  justify-items: center;
+  gap: 0.5rem;
+  font-size: 0.68rem;
+  letter-spacing: 0.28rem;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.scroll-hint .bar {
+  width: 1px; height: 46px;
+  background: linear-gradient(to bottom, var(--mint), transparent);
+  animation: hint 2.1s var(--ease-io) infinite;
+  transform-origin: top;
+}
+@keyframes hint {
+  0%   { transform: scaleY(0); opacity: 0; }
+  35%  { transform: scaleY(1); opacity: 1; }
+  100% { transform: scaleY(1) translateY(46px); opacity: 0; }
+}
+
+/* ========================================================== 8. stat marquee */
+.marquee {
+  border-block: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--ink-deep);
+  padding-block: 1.6rem;
+  overflow: hidden;
+  display: flex;
+  gap: 3.5rem;
+  white-space: nowrap;
+}
+.marquee-track {
+  display: flex;
+  gap: 3.5rem;
+  align-items: center;
+  flex: none;
+  animation: slide 38s linear infinite;
+  will-change: transform;
+}
+.marquee:hover .marquee-track { animation-play-state: paused; }
+@keyframes slide { to { transform: translateX(-100%); } }
+.marquee-item {
+  display: flex;
+  align-items: baseline;
+  gap: 0.7rem;
+  font-family: var(--display);
+  font-size: clamp(1.1rem, 2vw, 1.6rem);
+  font-weight: 600;
+  color: var(--white);
+}
+.marquee-item b { color: var(--mint); font-size: 1.35em; }
+.marquee-item span { color: var(--muted); font-weight: 400; font-size: 0.8em; }
+.marquee-dot { color: var(--mint-deep); font-size: 1.4rem; }
+
+/* ================================================ 9. scroll-scrubbed video ==
+   A sticky stage whose canvas frame index is driven by scroll position, so
+   scrolling down runs the clip forward and scrolling up runs it backward.
+   The clip is 478x850, so it plays inside a portrait panel at close to 1:1
+   pixels — stretching it full-bleed would be a 3x upscale and look soft.
+   ========================================================================== */
+.scrub {
+  /* the tall track that supplies the scroll distance */
+  height: 420vh;
+  position: relative;
+}
+.scrub-stage {
+  position: sticky;
+  top: 0;
+  height: 100svh;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  background: var(--ink-deep);
+}
+
+/* atmosphere: the poster frame, blown up and blurred far past recognition */
+.scrub-bg {
+  position: absolute;
+  inset: -8%;
+  background: url("../frames/poster/clip1.webp") center / cover no-repeat;
+  filter: blur(46px) saturate(0.7) brightness(0.42);
+  opacity: 0.55;
+}
+.scrub-stage::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(90% 70% at 30% 50%, rgba(13, 23, 23, 0.72), transparent 70%),
+    linear-gradient(to top, var(--ink) 0%, transparent 32%);
+  pointer-events: none;
+}
+
+.scrub-inner {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  max-width: var(--maxw);
+  margin-inline: auto;
+  padding-inline: var(--gut);
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: clamp(2rem, 6vw, 5rem);
+  align-items: center;
+}
+
+/* the three captions stack in one spot and cross-fade */
+.scrub-copy { position: relative; min-height: 260px; }
+.scrub-cap {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  translate: 0 -50%;               /* centring lives here … */
+  /* rem, not ch: `ch` resolves against this element's 1rem font, which would
+     wrap the 4rem heading inside it to one word per line */
+  max-width: 28rem;
+  opacity: 0;
+  transform: translateY(28px);     /* … so transform stays free for the reveal */
+  will-change: opacity, transform;
+  transition: opacity 0.5s ease, transform 0.7s var(--ease-out);
+}
+.scrub-cap.on { opacity: 1; transform: none; }
+
+.scrub-frame {
+  position: relative;
+  width: min(390px, 38vw);
+  aspect-ratio: 478 / 850;
+  border-radius: 18px;
+  overflow: hidden;
+  background: #000;
+  box-shadow: 0 50px 90px -30px rgba(0, 0, 0, 0.95);
+}
+.scrub-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  filter: contrast(1.06) saturate(0.95);
+}
+.scrub-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 1px var(--mint-30);
+  pointer-events: none;
+}
+
+.scrub-progress {
+  position: absolute;
+  left: var(--gut); right: var(--gut);
+  bottom: 42px;
+  z-index: 3;
+  height: 2px;
+  background: rgba(255, 255, 255, 0.12);
+}
+.scrub-progress i {
+  display: block;
+  height: 100%;
+  width: 100%;
+  background: var(--mint);
+  transform: scaleX(0);
+  transform-origin: left;
+}
+
+/* ===================================================== 10. reveal utilities ==
+   Every entrance animation is a class + the shared `.in` switch, so one
+   IntersectionObserver drives them all and the GPU does the work.
+   ========================================================================== */
+[data-rv] {
+  opacity: 0;
+  will-change: transform, opacity;
+  transition:
+    opacity var(--dur) var(--ease-out) var(--dly, 0s),
+    transform var(--dur) var(--ease-out) var(--dly, 0s),
+    filter var(--dur) var(--ease-out) var(--dly, 0s),
+    clip-path 1.1s var(--ease-io) var(--dly, 0s);
+}
+[data-rv].in { opacity: 1; transform: none; filter: none; clip-path: inset(0 0 0 0); }
+
+[data-rv="fade"]      { }
+[data-rv="up"]        { transform: translateY(46px); }
+[data-rv="down"]      { transform: translateY(-46px); }
+[data-rv="left"]      { transform: translateX(-64px); }
+[data-rv="right"]     { transform: translateX(64px); }
+[data-rv="scale"]     { transform: scale(0.86); }
+[data-rv="blur"]      { filter: blur(16px); transform: scale(1.04); }
+[data-rv="rotate"]    { transform: rotate(-7deg) translateY(40px) scale(0.95); transform-origin: bottom left; }
+[data-rv="clip-up"]   { clip-path: inset(100% 0 0 0); }
+[data-rv="clip-down"] { clip-path: inset(0 0 100% 0); }
+[data-rv="clip-left"] { clip-path: inset(0 100% 0 0); }
+[data-rv="wipe"]      { clip-path: inset(0 0 0 100%); }
+/* an image that settles out of a slow zoom */
+[data-rv="zoom"] img, [data-rv="zoom"] video { transform: scale(1.24); transition: transform 1.6s var(--ease-out) var(--dly, 0s); }
+[data-rv="zoom"].in img, [data-rv="zoom"].in video { transform: scale(1); }
+
+/* split-text: words and characters get their own stagger index */
+.split { display: inline-block; }
+.split .w { display: inline-block; overflow: hidden; vertical-align: top; }
+.split .c, .split .wi {
+  display: inline-block;
+  transform: translateY(105%) rotate(4deg);
+  opacity: 0;
+  transition: transform 0.85s var(--ease-out), opacity 0.6s ease;
+  transition-delay: calc(var(--i) * var(--stag, 0.028s));
+}
+.split.in .c, .split.in .wi { transform: none; opacity: 1; }
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  [data-rv] { opacity: 1 !important; transform: none !important; filter: none !important; clip-path: none !important; }
+  .split .c, .split .wi { opacity: 1 !important; transform: none !important; }
+}

@@ -1,0 +1,35 @@
+<!doctype html><html><head><meta charset="utf-8"><style>html,body{margin:0;background:#8a9aa6;overflow:hidden}</style></head>
+<body><script type="module">
+import * as THREE from 'three'
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js'
+import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js'
+const q = new URLSearchParams(location.search)
+const r = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true })
+r.setSize(innerWidth, innerHeight); r.toneMapping = THREE.ACESFilmicToneMapping; r.shadowMap.enabled = true
+document.body.appendChild(r.domElement)
+const scene = new THREE.Scene(); scene.background = new THREE.Color('#9fb0bc')
+scene.environment = new THREE.PMREMGenerator(r).fromScene(new RoomEnvironment()).texture
+const sun = new THREE.DirectionalLight('#fff', 2.5); sun.position.set(5, 10, 6); sun.castShadow = true; scene.add(sun)
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(40, 40), new THREE.MeshStandardMaterial({ color: '#555' }))
+ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground)
+const cam = new THREE.PerspectiveCamera(+(q.get('fov') || 40), innerWidth / innerHeight, 0.05, 200)
+const [d, pitch, yaw, ty] = (q.get('cam') || '7,0.25,0.6,0.7').split(',').map(Number)
+cam.position.set(Math.sin(yaw) * Math.cos(pitch) * d, ty + Math.sin(pitch) * d, Math.cos(yaw) * Math.cos(pitch) * d)
+cam.lookAt(0, ty, 0)
+const L = new GLTFLoader(); L.setMeshoptDecoder(MeshoptDecoder); L.load(q.get('m'), (g) => {
+  const hide = (q.get('hide') || '').split(',').filter(Boolean)
+  g.scene.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; const mats = Array.isArray(o.material) ? o.material : [o.material]; if (mats.some(m => hide.includes(m.name))) o.visible = false; if (q.get('normals')) o.material = new THREE.MeshNormalMaterial(); if (q.get('flat')) o.material = new THREE.MeshStandardMaterial({ color: '#b07050', roughness: 0.6, map: (Array.isArray(o.material)?o.material[0]:o.material).map }) } })
+  scene.add(g.scene)
+  for (const r of (q.get('rot') || '').split(';').filter(Boolean)) { const [n, a] = r.split(':'); const o = g.scene.getObjectByName(n); if (o) o.rotation.y = +a }
+  const box = new THREE.Box3().setFromObject(g.scene)
+  window.__info = { min: box.min.toArray(), max: box.max.toArray(), nodes: [] }
+  g.scene.traverse(o => window.__info.nodes.push([o.name, o.type, o.getWorldPosition(new THREE.Vector3()).toArray().map(v => +v.toFixed(3))]))
+  if (g.animations.length && q.get('anim')) {
+    const mix = new THREE.AnimationMixer(g.scene); const clip = g.animations.find(a => a.name === q.get('anim')) || g.animations[0]
+    mix.clipAction(clip).play(); mix.update(+(q.get('t') || 0.5))
+  }
+  window.__anims = g.animations.map(a => a.name)
+  r.render(scene, cam); window.__done = true
+})
+</script></body></html>

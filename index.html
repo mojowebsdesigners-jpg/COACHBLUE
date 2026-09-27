@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Coach Blue</title>
+<meta name="theme-color" content="#0D1717">
+<link rel="icon" href="assets/img/logo.png" sizes="any">
+<link rel="stylesheet" href="assets/css/film.css">
+</head>
+<body>
+
+<!-- The whole page is one clip. Scrolling is the transport: down runs it
+     forward with sound, up scrubs it back in silence. -->
+<div class="track" id="track">
+  <div class="stage">
+    <!-- Two cuts of the same film. A wide screen gets the 16:9; a phone held
+         upright gets the untouched 9:16, because cropping the wide one back to
+         portrait would shave the burned-in captions off both edges. JS picks
+         one before load so only a single file is ever fetched. -->
+    <video id="film"
+           data-wide="assets/video/hero.mp4"
+           data-tall="assets/video/hero-portrait.mp4"
+           poster="assets/img/hero-poster.webp"
+           preload="auto" playsinline muted disablepictureinpicture></video>
+
+    <div class="vignette" aria-hidden="true"></div>
+
+    <!-- progress -->
+    <div class="bar" aria-hidden="true"><i id="barfill"></i></div>
+
+    <!-- sound: a browser will not allow audio until there is a gesture -->
+    <button id="sound" class="sound" type="button" aria-label="Sound" aria-pressed="false">
+      <svg class="ico ico-off" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M4 9v6h4l5 4V5L8 9H4z"/>
+        <path class="stroke" d="M16.5 9.5l5 5m0-5l-5 5"/>
+      </svg>
+      <svg class="ico ico-on" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M4 9v6h4l5 4V5L8 9H4z"/>
+        <path class="stroke" d="M16.4 9a4.5 4.5 0 0 1 0 6M19 6.6a8 8 0 0 1 0 10.8"/>
+      </svg>
+    </button>
+
+    <!-- scroll cue, fades out once you move -->
+    <div class="cue" id="cue" aria-hidden="true"><span></span></div>
+  </div>
+</div>
+
+<script src="assets/js/film.js" defer></script>
+</body>
+</html>

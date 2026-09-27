@@ -1,0 +1,26 @@
+{
+  "clip1": {
+    "source": "WhatsApp Video 2026-09-07 at 10.06.39 PM.mp4",
+    "mp4": "assets/video/clip1.mp4"
+  },
+  "clip2": {
+    "source": "WhatsApp Video 2026-09-07 at 10.07.34 PM.mp4",
+    "mp4": "assets/video/clip2.mp4"
+  },
+  "clip3": {
+    "source": "WhatsApp Video 2026-09-07 at 10.08.55 PM.mp4",
+    "mp4": "assets/video/clip3.mp4"
+  },
+  "clip4": {
+    "source": "WhatsApp Video 2026-09-07 at 10.08.56 PM (1).mp4",
+    "mp4": "assets/video/clip4.mp4"
+  },
+  "clip5": {
+    "source": "WhatsApp Video 2026-09-07 at 10.08.56 PM.mp4",
+    "mp4": "assets/video/clip5.mp4"
+  },
+  "clip6": {
+    "source": "WhatsApp Video 2026-09-07 at 10.08.57 PM.mp4",
+    "mp4": "assets/video/clip6.mp4"
+  }
+}
