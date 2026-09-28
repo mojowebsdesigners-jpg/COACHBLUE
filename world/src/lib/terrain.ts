@@ -129,6 +129,86 @@ function streamDistance(x: number, z: number) {
   return (a + (bb - a) * tx) + ((c + (d - c) * tx) - (a + (bb - a) * tx)) * tz
 }
 
+/**
+ * The stream's water level along its course. Water runs downhill, and this
+ * course crosses high ground, so it rises at a spring on the highest land
+ * clear of the road and runs down from there both ways. The level only ever
+ * falls away from the spring: a metre under the land where the land is low,
+ * holding its level (in a gully) where the land rises. Smoothed so it never
+ * steps.
+ */
+let _levels: Float32Array | null = null
+let _source = 0
+function streamLevels() {
+  if (_levels) return _levels
+  const n = streamSamples.length
+  const land = streamSamples.map((s) => landHeight(s.x, s.z))
+  // under the road bridge the water runs two metres below the deck, which
+  // is laid between the banks at its ends
+  const e = bridge.length / 2 + 0.5
+  const bx = Math.sin(bridge.angle) * e, bz = Math.cos(bridge.angle) * e
+  const deck = Math.min(landHeight(bridge.x + bx, bridge.z + bz), landHeight(bridge.x - bx, bridge.z - bz))
+  for (let i = 0; i < n; i++) {
+    const s = streamSamples[i]
+    if (Math.hypot(s.x - bridge.x, s.z - bridge.z) < 16) land[i] = Math.min(land[i], deck - 1.0)
+  }
+  let src = 0, hi = -Infinity
+  for (let i = 0; i < n; i++) {
+    const s = streamSamples[i]
+    if (pathDistance(s.x, s.z) < 18) continue
+    let a = 0
+    for (let k = -8; k <= 8; k++) a += land[Math.min(n - 1, Math.max(0, i + k))]
+    if (a > hi) { hi = a; src = i }
+  }
+  _source = src
+  const lv = new Float32Array(n)
+  lv[src] = land[src] - 1.0
+  for (let i = src + 1; i < n; i++) lv[i] = Math.min(lv[i - 1] - 0.004, land[i] - 1.0)
+  for (let i = src - 1; i >= 0; i--) lv[i] = Math.min(lv[i + 1] - 0.004, land[i] - 1.0)
+  // a running average of a sequence falling away from the spring still falls
+  const sm = new Float32Array(n)
+  for (let i = 0; i < n; i++) {
+    let a = 0, c = 0
+    for (let k = -6; k <= 6; k++) {
+      const j = i + k
+      if (j < 0 || j >= n || (i - src) * (j - src) < 0) continue   // not across the spring
+      a += lv[j]; c++
+    }
+    sm[i] = a / c
+  }
+  _levels = sm
+  return sm
+}
+/** Where the stream rises: its sample index. */
+export function streamSource() {
+  streamLevels()
+  return _source
+}
+/** Index (fractional) of the nearest point on the stream's course, cached per metre. */
+const siGrid = new Float32Array(SD_NX * SD_NZ).fill(NaN)
+function siAt(i: number, j: number) {
+  const k = j * SD_NX + i
+  let v = siGrid[k]
+  if (v !== v) { v = nearestStreamIndex(SD_MINX + i * SD_CELL, SD_MINZ + j * SD_CELL); siGrid[k] = v }
+  return v
+}
+function nearestStreamIndex(x: number, z: number) {
+  let best = Infinity, bi = 0
+  for (let i = 0; i < streamSamples.length; i++) {
+    const s = streamSamples[i]
+    const d = (x - s.x) ** 2 + (z - s.z) ** 2
+    if (d < best) { best = d; bi = i }
+  }
+  return bi
+}
+/** The stream's water surface at (the nearest point of its course to) x, z. */
+export function streamLevel(x: number, z: number) {
+  const lv = streamLevels()
+  const fx = (x - SD_MINX) / SD_CELL, fz = (z - SD_MINZ) / SD_CELL
+  const ci = Math.min(SD_NX - 1, Math.max(0, Math.round(fx))), cj = Math.min(SD_NZ - 1, Math.max(0, Math.round(fz)))
+  return lv[siAt(ci, cj)]
+}
+
 function streamDistanceExact(x: number, z: number) {
   // cheap reject: the stream only runs across one band of the map
   if (x < STREAM_BOUNDS.minX - 12 || x > STREAM_BOUNDS.maxX + 12 ||
@@ -390,7 +470,8 @@ export function terrainHeight(x: number, z: number): number {
   return (a + (b - a) * tx) + ((c + (d - c) * tx) - (a + (b - a) * tx)) * tz
 }
 
-function terrainHeightExact(x: number, z: number): number {
+/** The land before any water is cut into it: hills, the levelled road, pads, the gym. */
+function landHeight(x: number, z: number): number {
   let h = rawHeight(x, z)
 
   // flatten the walking corridor towards its low-frequency shape
@@ -420,12 +501,23 @@ function terrainHeightExact(x: number, z: number): number {
     h += (gymBase() - h) * w
   }
 
-  // carve the stream (not where the bridge crosses); the channel itself is
-  // scoured deeper, so the middle of the stream is over your head
+  return h
+}
+
+function terrainHeightExact(x: number, z: number): number {
+  let h = landHeight(x, z)
+
+  // the stream's channel, cut to its water level: a bed over your head in
+  // the middle, banks meeting the water's edge (2.5 m out) and rising a metre per metre. Over a
+  // hill that is a gully; across a dip it is a raised bank. Either way the
+  // water always lies in the ground, never on top of it
   const sd = streamDistance(x, z)
-  if (sd < 9) {
-    const carve = (1 - smoothstep(3.2, 9, sd)) * STREAM_LEVEL_DROP
-    h -= carve + (1 - smoothstep(0.6, 2.6, sd)) * 1.35
+  if (sd < 10) {
+    const w = streamLevel(x, z)
+    const chan = sd < 2.2
+      ? w - 0.35 - 1.35 * (1 - smoothstep(0.6, 2.2, sd))
+      : w - 0.2 + (sd - 2.2) * 1.1
+    h += (chan - h) * (1 - smoothstep(4, 10, sd))
   }
 
   // the lake basin: bring the ground to the lake's level round the shore,
@@ -573,7 +665,8 @@ export function roadBase(x: number, z: number) {
 
 export const streamSurface = () => terrainHeight(bridge.x, bridge.z) - 0.25
 
-export const waterLevelAt = (x: number, z: number) => rawHeight(x, z) - STREAM_LEVEL_DROP + 0.35
+/** The stream's surface plus the ripple allowance its callers take off. */
+export const waterLevelAt = (x: number, z: number) => streamLevel(x, z) + 0.25
 /** Distance to the nearest water edge: the stream, the lake or the pool. */
 export function streamDistanceAt(x: number, z: number) {
   const pl = poolLocal(x, z)

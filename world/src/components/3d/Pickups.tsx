@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useFrame } from '@react-three/fiber'
-import { useGLTF } from '@react-three/drei'
-import { Box3, Mesh, Vector3, type Object3D } from 'three'
+import { Vector3, type Object3D } from 'three'
+import { makeWaterBottle } from './WaterBottle'
 import { groundHeight, gymFloorY, POOL, poolDeckHeight } from '../../lib/terrain'
 import { hideInstance } from '../../lib/instanceCull'
 import { locationById } from '../../data/journey'
@@ -45,15 +45,7 @@ function initialBottles(): Bottle[] {
 }
 
 function BottleModel({ b }: { b: Bottle }) {
-  const { scene } = useGLTF('/models/gym_bottle.glb')
-  const model = useMemo(() => {
-    const m = scene.clone(true)
-    m.traverse((o) => { const mm = o as Mesh; if (mm.isMesh) { mm.castShadow = true; mm.receiveShadow = true } })
-    const box = new Box3().setFromObject(m)
-    const centre = box.getCenter(new Vector3())
-    m.position.set(-centre.x, -box.min.y, -centre.z)
-    return m
-  }, [scene])
+  const model = useMemo(() => makeWaterBottle(), [])
   return <group position={[b.x, b.y, b.z]}><primitive object={model as Object3D} /></group>
 }
 
@@ -148,4 +140,3 @@ export function Pickups() {
   return <group>{bottles.map((b) => <BottleModel key={b.id} b={b} />)}</group>
 }
 
-useGLTF.preload('/models/gym_bottle.glb')

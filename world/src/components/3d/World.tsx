@@ -6,7 +6,7 @@ import {
 } from 'three'
 import {
   PATH_HALF_WIDTH, bridge, bridgeDeckHeight, bridgeEnds, pathSamples, streamSamples,
-  terrainHeight, waterLevelAt, addCollider,
+  terrainHeight, waterLevelAt, addCollider, streamLevel, streamSource,
 } from '../../lib/terrain'
 import { journeySteps, locationById } from '../../data/journey'
 import { useStore } from '../../state/store'
@@ -98,7 +98,28 @@ function Stream() {
     if (shader) shader.uniforms.uTime.value += dt
   })
 
-  return <mesh geometry={geometry} material={mat} receiveShadow />
+  // where it rises: water welling up among mossy boulders
+  const spring = useMemo(() => {
+    const src = streamSamples[streamSource()]
+    const y = streamLevel(src.x, src.z)
+    return Array.from({ length: 9 }, (_, i) => {
+      const a = (i / 9) * Math.PI * 2 + Math.sin(i * 7.1) * 0.3
+      const r = 2.7 + Math.sin(i * 3.3) * 0.5
+      const x = src.x + Math.cos(a) * r, z = src.z + Math.sin(a) * r
+      return { x, z, y: Math.max(y, terrainHeight(x, z)) - 0.15, s: 0.45 + ((i * 37) % 10) / 18, rot: i * 1.7 }
+    })
+  }, [])
+  return (
+    <group>
+      <mesh geometry={geometry} material={mat} receiveShadow />
+      {spring.map((r, i) => (
+        <mesh key={i} position={[r.x, r.y, r.z]} rotation={[r.rot, r.rot * 0.7, 0]} scale={[r.s * 1.3, r.s, r.s * 1.1]} castShadow receiveShadow>
+          <dodecahedronGeometry args={[1, 1]} />
+          <meshStandardMaterial color={i % 3 ? '#6d6a60' : '#56644a'} roughness={0.95} flatShading />
+        </mesh>
+      ))}
+    </group>
+  )
 }
 
 /**
