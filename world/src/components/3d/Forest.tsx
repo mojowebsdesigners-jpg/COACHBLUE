@@ -36,6 +36,13 @@ export function applyWind(mat: MeshStandardMaterial, strength = 0.05, height = 8
          transformed.x += sway * amp * transformed.y;
          transformed.z += sway * 0.55 * amp * transformed.y;`,
       )
+    // foliage right against the camera is not drawn: a branch or a bush the
+    // camera has backed into would otherwise fill the screen and hide him
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <clipping_planes_fragment>',
+      `#include <clipping_planes_fragment>
+       if (length(vViewPosition) < 1.4) discard;`,
+    )
   }
   mat.needsUpdate = true
   return mat

@@ -459,8 +459,48 @@ export function terrainNormalY(x: number, z: number) {
   return { slope: Math.hypot(hx, hz) / (2 * e), hx, hz }
 }
 
-/** Ground the player walks on: terrain, or the bridge deck when over the stream. */
+/**
+ * Raised things you can stand on — a podium, a step, a stage. Each is a
+ * circle or a box with a flat top. groundHeight() stands you on the highest
+ * one under you, and movement refuses to climb a step higher than a body
+ * (or a car) can, so nothing solid can ever be walked or driven through.
+ */
+export type Platform =
+  | { x: number; z: number; r: number; top: number }
+  | { x: number; z: number; hx: number; hz: number; angle: number; top: number }
+const platforms = new Set<Platform>()
+export function addPlatform(p: Platform) {
+  platforms.add(p)
+  return () => { platforms.delete(p) }
+}
+function platformTop(x: number, z: number) {
+  let top = -Infinity
+  for (const p of platforms) {
+    const dx = x - p.x, dz = z - p.z
+    if ('r' in p) {
+      if (dx * dx + dz * dz <= p.r * p.r) top = Math.max(top, p.top)
+    } else {
+      const c = Math.cos(p.angle), s = Math.sin(p.angle)
+      if (Math.abs(dx * c - dz * s) <= p.hx && Math.abs(dx * s + dz * c) <= p.hz) top = Math.max(top, p.top)
+    }
+  }
+  return top
+}
+/** How far a raised platform at (x, z) stands above `fromY` (slopes never count). */
+export function ledge(fromY: number, x: number, z: number) {
+  return platformTop(x, z) - Math.max(fromY, baseGround(x, z))
+}
+/** How far a body at height `fromY` would have to climb to stand at (x, z). */
+export function stepUp(fromY: number, x: number, z: number) {
+  return groundHeight(x, z) - fromY
+}
+
+/** Ground the player walks on: terrain, a platform, or the bridge deck when over the stream. */
 export function groundHeight(x: number, z: number) {
+  return Math.max(baseGround(x, z), platformTop(x, z))
+}
+
+function baseGround(x: number, z: number) {
   if (onBridge(x, z)) return bridgeDeckAt(x, z) + ROAD_LIFT
   // on the gym slab, stand on its top, not the ground under it
   if (gymOutside(x, z) < 0) return gymFloorY()
@@ -583,12 +623,21 @@ export function addCollider(c: Collider) {
   const x1 = Math.floor((solid.x + reach) / CELL) + 1
   const z0 = Math.floor((solid.z - reach) / CELL) - 1
   const z1 = Math.floor((solid.z + reach) / CELL) + 1
+  const cells: Solid[][] = []
   for (let i = x0; i <= x1; i++) {
     for (let j = z0; j <= z1; j++) {
       const k = key(i, j)
       let list = grid.get(k)
       if (!list) grid.set(k, (list = []))
       list.push(solid)
+      cells.push(list)
+    }
+  }
+  /** take it out again (a location unloading, say) */
+  return () => {
+    for (const list of cells) {
+      const i = list.indexOf(solid)
+      if (i >= 0) list.splice(i, 1)
     }
   }
 }

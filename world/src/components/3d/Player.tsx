@@ -197,6 +197,9 @@ export function findBones(root: Object3D) {
 export function Player() {
   const group = useRef<Group>(null)
   const { clone, animations } = useCoachModel()
+  // the player is never culled: the camera is always on him, and a bounding
+  // sphere that lags a pose (lying down, climbing) must not make him vanish
+  useMemo(() => clone.traverse((o) => { if ((o as SkinnedMesh).isSkinnedMesh) o.frustumCulled = false }), [clone])
   const { actions, mixer } = useAnimations(animations, clone)
   const view = useStore((s) => s.view)
   const soundOn = useStore((s) => s.settings.sound)

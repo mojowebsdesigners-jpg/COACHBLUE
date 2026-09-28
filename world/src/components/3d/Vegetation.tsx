@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef } from 'react'
 import { registerInstanceCull } from '../../lib/instanceCull'
 import { useGLTF } from '@react-three/drei'
 import {
+  Float32BufferAttribute, LatheGeometry, Vector2,
   BufferAttribute, BufferGeometry, Color, CylinderGeometry, DoubleSide,
   IcosahedronGeometry, InstancedMesh, Matrix4, Mesh, MeshStandardMaterial, Object3D,
   PlaneGeometry, SphereGeometry,
@@ -112,13 +113,53 @@ function flowerGeometry() {
   return mergeGeometries(parts, false)!
 }
 
+/**
+ * A wild mushroom (a young bolete): lathed, not assembled from primitives.
+ * The cap is a domed disc with a rolled rim, chestnut on top shading paler to
+ * the edge, flecked; under it the pale gills radiate out from the stem; the
+ * stem is thick, a little bulbous at the foot, cream with faint brown fibres.
+ * About 12 cm tall, as a real one is.
+ */
 export function mushroomGeometry() {
-  const stem = new CylinderGeometry(0.018, 0.025, 0.11, 5)
-  stem.translate(0, 0.055, 0)
-  const cap = new SphereGeometry(0.06, 7, 5, 0, Math.PI * 2, 0, Math.PI / 2)
-  cap.scale(1, 0.62, 1)
-  cap.translate(0, 0.11, 0)
-  return mergeGeometries([tint(stem, '#cfc6ac', '#e6dcc2'), tint(cap, '#6d3f2a', '#8d5334', 0.2)], false)!
+  const V = (x: number, y: number) => new Vector2(x, y)
+  // stem: base bulb up to the cap
+  const stem = new LatheGeometry([
+    V(0.0, 0.0), V(0.02, 0.001), V(0.027, 0.012), V(0.026, 0.03), V(0.021, 0.055), V(0.018, 0.08), V(0.017, 0.092), V(0.0, 0.094),
+  ], 12)
+  // cap: the domed top and its rolled rim, lathed as one closed profile
+  const cap = new LatheGeometry([
+    V(0.0, 0.126), V(0.018, 0.125), V(0.036, 0.119), V(0.05, 0.108), V(0.058, 0.096), V(0.06, 0.088), V(0.057, 0.084),
+    V(0.045, 0.086), V(0.03, 0.089), V(0.017, 0.091), V(0.0, 0.092),
+  ].reverse(), 16)
+  const paint = (g: BufferGeometry, fn: (x: number, y: number, z: number) => Color) => {
+    const p = g.attributes.position as BufferAttribute
+    const col = new Float32Array(p.count * 3)
+    for (let i = 0; i < p.count; i++) {
+      const c = fn(p.getX(i), p.getY(i), p.getZ(i))
+      col.set([c.r, c.g, c.b], i * 3)
+    }
+    g.setAttribute('color', new Float32BufferAttribute(col, 3))
+    return g
+  }
+  const cream = new Color('#e8dcc0'), fibre = new Color('#b89f78')
+  const chest = new Color('#5c2f1b'), rim = new Color('#9a5a34'), gill = new Color('#d9c79e')
+  const c = new Color()
+  paint(stem, (x, y, z) => {
+    const f = 0.5 + 0.5 * Math.sin(Math.atan2(z, x) * 9 + y * 40)
+    return c.copy(cream).lerp(fibre, f * 0.35 * (1 - y / 0.1))
+  })
+  paint(cap, (x, y, z) => {
+    const r = Math.hypot(x, z)
+    // the underside (below the rim's lip) is gills: pale, with radial streaks
+    if (y < 0.0915 && r < 0.056) {
+      const streak = 0.5 + 0.5 * Math.cos(Math.atan2(z, x) * 42)
+      return c.copy(gill).multiplyScalar(0.82 + 0.18 * streak)
+    }
+    const t = Math.min(1, r / 0.06)
+    const fleck = (Math.sin(x * 390) * Math.cos(z * 410)) > 0.86 ? 0.2 : 0
+    return c.copy(chest).lerp(rim, t * t).lerp(cream, fleck)
+  })
+  return mergeGeometries([stem.toNonIndexed(), cap.toNonIndexed()], false)!
 }
 
 // ---------------------------------------------------------------- placement

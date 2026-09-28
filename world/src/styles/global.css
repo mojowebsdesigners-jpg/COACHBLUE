@@ -931,3 +931,32 @@ body.underwater::after {
 .swim-hud__air i { display: block; width: 160px; height: 5px; border-radius: 3px; background: rgba(255,255,255,0.18); overflow: hidden; }
 .swim-hud__air b { display: block; height: 100%; background: #8ee9ff; transition: width 0.15s linear; }
 .swim-hud__air.is-low b { background: #ff6b5a; }
+
+/* ---------------------------------------------------------------- the big map */
+.map-inner.big {
+  width: min(94vw, calc(94vh - 90px + 0px)); display: flex; flex-direction: column; gap: 10px;
+}
+.map-head { display: flex; align-items: center; gap: 16px; justify-content: space-between; white-space: nowrap; }
+.map-wrap:has(.map-inner.big) { background: rgba(5, 8, 7, 0.94); z-index: 40; }
+.map-head .eyebrow { margin: 0; }
+.map-help { font-size: 0.66rem; letter-spacing: 0.12em; text-transform: uppercase; color: #9fb3ac; }
+.map-head .btn kbd { font: inherit; border: 1px solid currentColor; border-radius: 3px; padding: 0 4px; margin-left: 4px; }
+.map-stage.flat { position: relative; perspective: none; }
+.map-canvas.big {
+  display: block; width: min(94vw, 94vh - 110px); height: min(94vw, 94vh - 110px); max-width: 100%;
+  transform: none; border-radius: 14px; cursor: crosshair; touch-action: none;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.08);
+  animation: map-in 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes map-in { from { opacity: 0; transform: scale(0.96); } }
+.map-tip {
+  position: absolute; transform: translate(-50%, calc(-100% - 20px)); pointer-events: none;
+  background: rgba(8, 12, 13, 0.94); border: 1px solid rgba(29, 233, 182, 0.4); border-radius: 8px;
+  padding: 7px 11px; display: flex; flex-direction: column; gap: 2px; white-space: nowrap; text-align: left;
+}
+.map-tip b { font-family: var(--display); letter-spacing: 0.12em; text-transform: uppercase; font-size: 0.8rem; color: #f2f7f5; }
+.map-tip span { font-size: 0.7rem; color: #b9c9c3; }
+.map-tip i { font-style: normal; font-size: 0.58rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--mint); }
+.map-key { display: flex; flex-wrap: wrap; gap: 6px 18px; justify-content: center; font-size: 0.64rem; letter-spacing: 0.1em; text-transform: uppercase; color: #9fb3ac; }
+.map-key b { margin-right: 6px; font-weight: 400; }
+@media (prefers-reduced-motion: reduce) { .map-canvas.big { animation: none; } }

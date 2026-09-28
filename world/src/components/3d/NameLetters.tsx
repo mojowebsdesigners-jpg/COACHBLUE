@@ -215,7 +215,7 @@ export function NameLetters() {
 
   return (
     <group>
-      <group ref={group}>
+      <group ref={group} userData={{ noCollide: true }}>
         {letters.map(({ geo, mat }, i) => (
           <mesh key={i} geometry={geo} material={mat} castShadow receiveShadow />
         ))}

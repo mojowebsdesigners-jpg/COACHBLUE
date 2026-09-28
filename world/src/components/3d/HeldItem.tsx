@@ -17,6 +17,8 @@ const _q = new Quaternion()
 const _side = new Vector3()
 const _up = new Vector3(0, 1, 0)
 const _fwd = new Vector3()
+const _a = new Vector3()
+const _b = new Vector3()
 
 export function HeldItem({ hand: bone }: { hand: Object3D }) {
   const { scene } = useGLTF('/models/gym_bottle.glb')
@@ -33,13 +35,23 @@ export function HeldItem({ hand: bone }: { hand: Object3D }) {
     return g
   }, [scene])
   const mushroom = useMemo(() => {
-    const m = new Mesh(mushroomGeometry(), new MeshStandardMaterial({ vertexColors: true, roughness: 0.9 }))
-    m.scale.setScalar(1.3)
-    m.position.y = -0.06
+    const m = new Mesh(mushroomGeometry(), new MeshStandardMaterial({ vertexColors: true, roughness: 0.75 }))
+    m.castShadow = true
+    // pinched by the stem: the grip point is a third of the way up it
+    m.position.y = -0.03
     const g = new Group()
     g.add(m)
     return g
   }, [])
+  // the pinch: between the tip of the thumb and the index finger
+  const fingers = useMemo(() => {
+    const find = (key: string) => {
+      let f: Object3D | undefined
+      bone.traverse((o) => { if (!f && o.name.includes(key)) f = o })
+      return f
+    }
+    return { thumb: find('HandThumb3') ?? find('HandThumb2'), index: find('HandIndex2') ?? find('HandIndex1') }
+  }, [bone])
   const root = useRef<Group>(null)
 
   useFrame(() => {
@@ -53,6 +65,19 @@ export function HeldItem({ hand: bone }: { hand: Object3D }) {
     bone.updateWorldMatrix(true, false)
     bone.getWorldPosition(_p)
     bone.getWorldQuaternion(_q)
+    if (item === 'mushroom' && fingers.thumb && fingers.index) {
+      // held upright between thumb and forefinger, turned to face the way he
+      // faces; lifted to the mouth, the cap tips towards it
+      fingers.thumb.getWorldPosition(_a)
+      fingers.index.getWorldPosition(_b)
+      g.position.lerpVectors(_a, _b, 0.5)
+      const a = hand.action
+      const raise = a && a.kind === 'consume' ? raiseAmount(a.t / a.dur) : 0
+      _fwd.set(0, 0, 1).applyQuaternion(_q)
+      g.quaternion.setFromAxisAngle(_up, Math.atan2(_fwd.x, _fwd.z))
+      g.rotateX(0.25 + raise * 0.9)
+      return
+    }
     // the palm is a few centimetres out from the wrist joint, along the hand
     _fwd.set(0, 1, 0).applyQuaternion(_q)
     g.position.copy(_p).addScaledVector(_fwd, 0.085)
@@ -68,7 +93,7 @@ export function HeldItem({ hand: bone }: { hand: Object3D }) {
   }, 3)
 
   return (
-    <group ref={root}>
+    <group ref={root} userData={{ noCollide: true }}>
       <primitive object={bottle} />
       <primitive object={mushroom} />
     </group>

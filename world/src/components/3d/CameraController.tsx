@@ -4,6 +4,7 @@ import { player, useStore } from '../../state/store'
 import { stepCamera, type CameraMode } from '../../systems/ThirdPersonCamera'
 import { vehicle } from '../../systems/VehicleController'
 import { input } from '../../lib/input'
+import { stepTravel, travel } from '../../systems/FastTravel'
 import { vehicleCameraTarget } from './Vehicle'
 
 /** Cinematic camera takeover, set by interactions. Not React state — per frame. */
@@ -15,6 +16,7 @@ export const cameraOverride = {
 }
 
 const driveFrame = { pos: new Vector3(), look: new Vector3() }
+const travelFrame = { pos: new Vector3(), look: new Vector3() }
 
 export function CameraController() {
   const camera = useThree((s) => s.camera) as PerspectiveCamera
@@ -24,6 +26,14 @@ export function CameraController() {
 
   useFrame((_, delta) => {
     const dt = Math.min(delta, 0.05)
+    // travelling by the map: the skycam owns the camera
+    if (travel.active && stepTravel(dt, travelFrame.pos, travelFrame.look)) {
+      cameraOverride.pos.copy(travelFrame.pos)
+      cameraOverride.target.copy(travelFrame.look)
+      cameraOverride.ease = 30
+      stepCamera(camera, dt, 'cinematic', cameraOverride, reduced)
+      return
+    }
     // driving takes over the camera: further back, higher, looking up the road
     if (vehicle.occupied && !photoMode) {
       // the chase camera reads the mouse itself (to orbit the car)

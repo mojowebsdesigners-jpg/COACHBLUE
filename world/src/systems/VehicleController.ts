@@ -2,7 +2,7 @@ import { MathUtils, Vector3 } from 'three'
 import { input } from '../lib/input'
 import {
   PATH_HALF_WIDTH, addDynamicCollider, forestDensity, groundHeight, pathDistance, pathSamples,
-  resolveCollisions, type Collider,
+  resolveCollisions, ledge, type Collider,
 } from '../lib/terrain'
 import { player } from '../state/store'
 
@@ -241,8 +241,23 @@ export function stepVehicle(dt: number) {
     const nx = vehicle.pos.x + Math.sin(vehicle.yaw) * step
     const nz = vehicle.pos.z + Math.cos(vehicle.yaw) * step
     const fixed = resolveCollisions(nx, nz, CAR.bodyRadius, carCollider)
+    // a kerb higher than a tyre can climb stops the car: probe the bumper
+    // (front or back, whichever way it is going) and both of its corners
+    const dir = Math.sign(step)
+    const fx = Math.sin(vehicle.yaw) * dir, fz = Math.cos(vehicle.yaw) * dir
+    let hit = false
+    for (const side of [-0.85, 0, 0.85]) {
+      const x = fixed.x + fx * 2.35 + fz * side, z = fixed.z + fz * 2.35 - fx * side
+      if (ledge(vehicle.pos.y, x, z) > 0.3) { hit = true; break }
+    }
+    if (hit) {
+      fixed.x = vehicle.pos.x
+      fixed.z = vehicle.pos.z
+      // a hard stop, and a little bounce back off it
+      vehicle.speed = -vehicle.speed * 0.15
+    }
     const moved = Math.hypot(fixed.x - vehicle.pos.x, fixed.z - vehicle.pos.z)
-    if (moved < Math.abs(step) * 0.4) vehicle.speed *= 0.35   // clipped something
+    if (!hit && moved < Math.abs(step) * 0.4) vehicle.speed *= 0.35   // clipped something
     vehicle.pos.x = fixed.x
     vehicle.pos.z = fixed.z
   }

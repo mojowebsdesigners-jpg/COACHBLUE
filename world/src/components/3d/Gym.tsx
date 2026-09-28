@@ -146,7 +146,7 @@ export function HeldBarbell({ hands, yaw, station }: { hands: Hands; yaw: number
       g.quaternion.setFromUnitVectors(_xAxis, _shaft)
     }
   })
-  return <group ref={ref}><primitive object={model} /></group>
+  return <group ref={ref} userData={{ noCollide: true }}><primitive object={model} /></group>
 }
 
 /** A single hex dumbbell, built here because the modelled asset is a full rack. */
@@ -163,7 +163,7 @@ export function HeldDumbbell({ hand, side, yaw = 0, station }: { hand: Hands; si
     g.rotation.set(0, yaw, 0)
   })
   return (
-    <group ref={ref}>
+    <group ref={ref} userData={{ noCollide: true }}>
       <mesh castShadow rotation={[0, 0, Math.PI / 2]}>
         <cylinderGeometry args={[0.019, 0.019, 0.2, 10]} />
         <meshStandardMaterial color="#8b8d90" roughness={0.3} metalness={1} />
@@ -536,7 +536,7 @@ export function HeldKettlebell({ hands }: { hands: Hands }) {
     if (_shaft.lengthSq() > 1e-6) g.rotation.set(0, Math.atan2(-_shaft.z, _shaft.x), 0)
   })
   return (
-    <group ref={ref}>
+    <group ref={ref} userData={{ noCollide: true }}>
       {/* the handle across both palms */}
       <mesh castShadow rotation={[0, 0, Math.PI / 2]}>
         <cylinderGeometry args={[0.017, 0.017, 0.15, 12]} />

@@ -116,10 +116,11 @@ export function stepCamera(
     // Looking up: as the camera drops below him, the aim point rises above
     // his head, so the view tilts up the hill (or the rope, or into the sky)
     // instead of staring at his back
+    // (never so far that he leaves the bottom of the frame)
     const up = Math.max(0, -pitch)
     lookTarget.set(
       player.pos.x + Math.sin(player.yaw) * lead,
-      player.pos.y + CAM.lookHeight + sprintT * 0.15 + up * up * 4.5,
+      player.pos.y + CAM.lookHeight + sprintT * 0.15 + Math.min(1.1, up * up * 2.2),
       player.pos.z + Math.cos(player.yaw) * lead,
     )
 
@@ -127,20 +128,23 @@ export function stepCamera(
     // looking up puts the camera low: let it rest just above the ground
     // behind him (the way a game camera skims the grass) rather than sink
     desired.y = Math.max(desired.y, terrainHeight(desired.x, desired.z) + 0.45)
-    // terrain first: if the hillside comes between the camera and him, the
-    // camera comes in along its own line, the way a boom would. It used to
-    // climb over every rise instead, which on a real slope swung it up into
-    // a view from overhead with half of him hidden behind the ground.
-    for (let i = 1; i <= 8; i++) {
-      const k = i / 8
-      const sx = MathUtils.lerp(lookTarget.x, desired.x, k)
-      const sz = MathUtils.lerp(lookTarget.z, desired.z, k)
-      const sy = MathUtils.lerp(lookTarget.y, desired.y, k)
-      if (sy < terrainHeight(sx, sz) + 0.45) {
-        desired.lerpVectors(lookTarget, desired, Math.max(CAM.minDistance / Math.max(dist, 0.01), k - 0.1))
-        break
+    // terrain first. If the hillside comes between the camera and him, the
+    // camera rises over it (a crane, not a dive into the slope); only if that
+    // is not enough does it come in closer along its line.
+    const chestY = player.pos.y + 1.25
+    const blocked = () => {
+      for (let i = 1; i <= 8; i++) {
+        const k = i / 9
+        const sx = MathUtils.lerp(player.pos.x, desired.x, k)
+        const sz = MathUtils.lerp(player.pos.z, desired.z, k)
+        const sy = MathUtils.lerp(chestY, desired.y, k)
+        if (sy < terrainHeight(sx, sz) + 0.3) return k
       }
+      return 0
     }
+    for (let i = 0; i < 12 && blocked(); i++) desired.y += 0.25
+    const k = blocked()
+    if (k) desired.lerpVectors(lookTarget, desired, Math.max(CAM.minDistance / Math.max(dist, 0.01), k - 0.1))
     desired.y = Math.max(desired.y, terrainHeight(desired.x, desired.z) + 0.6)
     // then solid objects: pull the camera in along its own line
     ray.copy(desired).sub(lookTarget)
@@ -152,6 +156,20 @@ export function stepCamera(
         desired.copy(lookTarget).addScaledVector(ray, pulled)
         desired.y = Math.max(desired.y, terrainHeight(desired.x, desired.z) + 0.5)
       }
+    }
+  }
+
+  // ---- never inside him ------------------------------------------------
+  // whatever pulled the camera in, it stays a body-width clear of him, so he
+  // is always in front of it and never clipped away by the near plane
+  if (mode === 'third') {
+    const dx = desired.x - player.pos.x, dz = desired.z - player.pos.z
+    const hd = Math.hypot(dx, dz)
+    const MIN = 1.1
+    if (hd < MIN && desired.y < player.pos.y + 2.1) {
+      if (hd > 1e-3) { desired.x = player.pos.x + (dx / hd) * MIN; desired.z = player.pos.z + (dz / hd) * MIN }
+      else { desired.x = player.pos.x + Math.sin(camYaw) * MIN; desired.z = player.pos.z + Math.cos(camYaw) * MIN }
+      desired.y = Math.max(desired.y, player.pos.y + 1.9)
     }
   }
 

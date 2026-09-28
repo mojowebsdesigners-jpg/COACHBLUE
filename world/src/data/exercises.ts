@@ -25,6 +25,22 @@ export type ExerciseDef = {
   reach: number
   /** what the hands are holding, if anything */
   holds?: 'dumbbells' | 'barbell' | 'kettlebell' | null
+  /**
+   * How the player drives it (default 'reps': Space for each rep):
+   *  hold   hold Space (or W) to keep going; a rep every `every` seconds
+   *  free   just do it; a rep every `every` seconds; Space changes the move
+   *  steps  each Space moves on to the next of `steps` moves, looping
+   *  power  Space starts a charge meter, Space again releases at that power;
+   *         the move then plays over `actionTime` s, releasing at `releaseAt`
+   *  custom the station steps itself (a swing, a trampoline, a fishing line)
+   */
+  mode?: 'reps' | 'hold' | 'free' | 'steps' | 'power' | 'custom'
+  every?: number
+  steps?: number
+  actionTime?: number
+  releaseAt?: number
+  /** a line of how-to for the set card */
+  how?: string
 }
 
 export const POINTS: Record<Difficulty, number> = {

@@ -193,7 +193,7 @@ export function Vehicle() {
   })
 
   return (
-    <group>
+    <group userData={{ noCollide: true }}>
       <group ref={body}>
         <primitive object={rig.model} />
         {/* the driver rides inside the body group, so he takes the car's yaw,

@@ -26,11 +26,12 @@ export function PerformanceWatch() {
   const setDpr = useThree((s) => s.setDpr)
   const gl = useThree((s) => s.gl)
   const scene = useThree((s) => s.scene)
+  const camera = useThree((s) => s.camera)
   // for profiling from the console: draw calls, triangles, object count
   useEffect(() => {
     const w = window as unknown as { __cb?: Record<string, unknown> }
-    w.__cb = { ...w.__cb, gl, scene }
-  }, [gl, scene])
+    w.__cb = { ...w.__cb, gl, scene, camera }
+  }, [gl, scene, camera])
   // as the world streams in, keep shared materials on one shader variant each
   useEffect(() => {
     const id = window.setInterval(() => harmonizeMaterials(scene), 3000)

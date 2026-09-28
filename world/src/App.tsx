@@ -12,11 +12,14 @@ import { DebugHud, debugEnabled } from './components/ui/DebugHud'
 import { summonVehicle, vehicle } from './systems/VehicleController'
 import { isWorkingOut, stopWorkout, workout } from './systems/Workout'
 import { setDestination } from './systems/Navigation'
+import { travel } from './systems/FastTravel'
+import { registerMapPlaces } from './systems/MapPlaces'
 import './systems/Coaching'
 import './systems/DevCheats'
 import { preloadModels } from './systems/AssetManager'
 import { ShaderWarmup } from './components/3d/ShaderWarmup'
 import { ShaderGate } from './components/3d/ShaderGate'
+import { AutoColliders } from './components/3d/AutoColliders'
 import { PerformanceWatch } from './components/3d/PerformanceWatch'
 import { DistanceCull } from './components/3d/DistanceCull'
 import { attachInput, input, setJoystick } from './lib/input'
@@ -64,6 +67,8 @@ export function toggleOutfit() {
   s.setOutfit(next)
   s.showToast(next === 'shirt' ? 'COACH BLUE SHIRT' : 'SHIRT OFF', next === 'shirt' ? 'Team colours on' : 'Training in the sun')
 }
+
+registerMapPlaces()
 
 // no arrival cinematics while driving, training, boarding or holding a hand action
 setCinematicBlock(() => vehicle.occupied || isWorkingOut() || isBoarding() || isBusyHand())
@@ -118,6 +123,7 @@ function Scene({ webgpu }: { webgpu: boolean }) {
         <Preload all />
         <ShaderWarmup />
         <ShaderGate />
+        <AutoColliders />
         <PerformanceWatch />
         <DistanceCull />
       </Suspense>
@@ -252,7 +258,8 @@ export default function App() {
       const busy =
         !!s.panel || s.photoIndex !== null || s.mapOpen || s.journalOpen || s.settingsOpen ||
         s.bookingOpen || s.photoMode || !!s.cinematic || !!s.dialog || s.phase !== 'world'
-      player.frozen = busy
+      // a map flight, a boarding, a hand action or a set keep him held too
+      player.frozen = busy || travel.active || isBoarding() || isBusyHand() || isWorkingOut()
       // Mouse look may only capture the pointer while the world is actually
       // being played. The canvas mounts during loading so assets can stream,
       // which means a click on the splash or the mode screen lands on it — and
@@ -353,7 +360,7 @@ export default function App() {
                     preserveDrawingBuffer: true,   // so photo mode can save the view
                   }
             }
-            camera={{ fov: 58, near: 0.3, far: 2600, position: [0, 6, 176] }}
+            camera={{ fov: 58, near: 0.12, far: 2600, position: [0, 6, 176] }}
             onCreated={({ gl }) => {
               // the error check reads the program log synchronously, which
               // blocks until the driver has linked it; a shipped build has no

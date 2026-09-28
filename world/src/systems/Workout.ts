@@ -59,6 +59,12 @@ export type Station = {
    * out of the far end of the net. Given how far the work got.
    */
   exitAt?: (distance: number) => [number, number]
+  /** told of every rep as it lands */
+  onRep?: (reps: number) => void
+  /** power moves: the moment of release, at the power chosen (0..1) */
+  onRelease?: (power: number) => void
+  /** custom stations run themselves; returns reps gained this frame */
+  stepCustom?: (dt: number, taps: number, held: boolean) => number
 }
 
 export type RepEvent = { reps: number; points: number; gained: number; at: Vector3 }
@@ -94,6 +100,14 @@ export const workout = {
   /** treadmill: belt speed in m/s, and metres covered this session */
   belt: 0,
   distance: 0,
+  /** power moves: the meter (0..1), whether it is running, the move's progress */
+  charge: 0,
+  charging: false,
+  action: -1,
+  power: 0,
+  /** the result of the last power move, for the card */
+  result: '',
+  resultStamp: 0,
 }
 
 export const isWorkingOut = () => workout.station !== null
@@ -154,6 +168,10 @@ export function startWorkout(station: Station) {
   workout.grade = ''
   workout.belt = station.def.pose === 'run' ? BELT.start : 0
   workout.distance = 0
+  workout.charge = 0
+  workout.charging = false
+  workout.action = -1
+  workout.result = ''
   consumeTaps()
   // ask whoever is using it to finish their rep and move off
   if (station.occupiedBy || station.displaces) yielded.add(station.displaces ?? station.id)
@@ -206,7 +224,7 @@ function finish() {
   finishers.forEach((fn) => fn(done))
 }
 
-function award(count: number, bonus: number) {
+export function award(count: number, bonus: number) {
   const st = workout.station!
   const gained = Math.round(count * st.def.pointsPerRep * bonus)
   workout.reps += count
@@ -214,6 +232,7 @@ function award(count: number, bonus: number) {
   lastRep.n = workout.reps
   lastRep.gained = gained
   lastRep.stamp = performance.now()
+  st.onRep?.(workout.reps + (workout.set - 1) * st.def.repsPerSet)
   // a finished set rolls into the next one rather than ending the session
   if (workout.reps >= st.def.repsPerSet) {
     workout.set += 1
@@ -249,6 +268,81 @@ export function stepWorkout(dt: number) {
   if (workout.enter < 1) {
     workout.enter = Math.min(1, workout.enter + dt / ENTER_TIME)
     consumeTaps()      // presses while stepping on do not bank reps
+    return false
+  }
+
+  // ---- the fun park's ways of playing ------------------------------------
+  const mode = st.def.mode ?? 'reps'
+  if (mode === 'custom' && st.stepCustom) {
+    const taps = consumeTaps()
+    workout.phase += dt
+    const got = st.stepCustom(dt, taps, input.actionHeld || input.forward > 0)
+    if (got > 0) { award(got, 1); return true }
+    return false
+  }
+  if (mode === 'hold') {
+    consumeTaps()
+    const held = input.actionHeld || input.forward > 0
+    workout.belt += ((held ? 1 : 0) - workout.belt) * Math.min(1, dt * 4)
+    workout.phase += dt * (0.3 + workout.belt * 0.7)
+    if (!held) return false
+    const every = st.def.every ?? 4
+    const before = Math.floor(workout.distance / every)
+    workout.distance += dt
+    if (Math.floor(workout.distance / every) > before) { award(1, 1); return true }
+    return false
+  }
+  if (mode === 'free') {
+    const taps = consumeTaps()
+    workout.credits += taps                     // Space changes the move
+    workout.phase += dt
+    const every = st.def.every ?? 6
+    const before = Math.floor(workout.distance / every)
+    workout.distance += dt
+    if (Math.floor(workout.distance / every) > before) { award(1, 1); return true }
+    return false
+  }
+  if (mode === 'steps') {
+    const n = st.def.steps ?? 4
+    const taps = consumeTaps()
+    workout.phase += dt
+    workout.credits = Math.min(2, workout.credits + taps)
+    if (workout.credits > 0) {
+      const next = Math.floor(workout.distance + 1e-6) + 1
+      workout.distance = Math.min(next, workout.distance + dt * 0.9)
+      if (workout.distance >= next - 1e-6) {
+        workout.credits--
+        if (workout.distance >= n) workout.distance -= n      // round again
+        award(1, 1)
+        return true
+      }
+    }
+    return false
+  }
+  if (mode === 'power') {
+    const taps = consumeTaps()
+    workout.phase += dt
+    const T = st.def.actionTime ?? 1.4, R = st.def.releaseAt ?? 0.55
+    if (workout.action >= 0) {
+      // the move is playing out
+      const before = workout.action
+      workout.action += dt / T
+      if (before < R && workout.action >= R) st.onRelease?.(workout.power)
+      if (workout.action >= 1) workout.action = -1
+      return false
+    }
+    if (workout.charging) {
+      // the meter swings up and down: let go at the top
+      workout.charge = 0.5 - 0.5 * Math.cos(workout.phase * 3.2)
+      if (taps > 0) {
+        workout.charging = false
+        workout.power = workout.charge
+        workout.action = 0
+      }
+    } else if (taps > 0) {
+      workout.charging = true
+      workout.phase = 0
+    }
     return false
   }
 
@@ -420,3 +514,16 @@ export function checkWorkoutRange() {
 
 /** The exercise being performed, for read-outs. */
 export const currentExercise = () => workout.station?.def ?? null
+
+/** The outcome of a power move (a basket, a strike, a catch), shown on the card. */
+export function showResult(text: string, points = 0) {
+  workout.result = text
+  workout.resultStamp = performance.now()
+  if (points > 0 && workout.station) {
+    workout.points += points
+    lastRep.gained = points
+    lastRep.stamp = performance.now()
+    workout.reps += 1
+  }
+  notify()
+}

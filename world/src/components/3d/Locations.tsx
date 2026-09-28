@@ -8,7 +8,10 @@ import { faq } from '../../data/faq'
 import { app, pillars, process } from '../../data/programs'
 import { coach } from '../../data/coach'
 import { transformations } from '../../data/transformations'
-import { GYM, GYM_SLAB_W, GYM_SLAB_D, addBoxFor, addCollider, addGrassClear, groundHeight, pathCurve } from '../../lib/terrain'
+import {
+  GYM, GYM_SLAB_W, GYM_SLAB_D, PATH_HALF_WIDTH, addBoxFor, addCollider, addGrassClear, addPlatform, groundHeight,
+  pathCurve, pathDistance,
+} from '../../lib/terrain'
 import { player, useStore } from '../../state/store'
 import { registerInteractable } from './InteractionSystem'
 import {
@@ -333,9 +336,34 @@ export function DisciplinePath() {
 }
 
 // ---------------------------------------------------------------- 100 days
+/**
+ * Where the 100 podium stands: the location's centre sits on the trail, so it
+ * is set back onto the verge — far enough that its lowest step clears the
+ * tarmac — along whichever side of the road has room.
+ */
+function podiumSpot(cx: number, cz: number): [number, number] {
+  let best: [number, number] = [cx, cz], bd = -1
+  for (let a = 0; a < Math.PI * 2; a += Math.PI / 16) {
+    for (let d = 4; d <= 14; d += 1) {
+      const x = cx + Math.cos(a) * d, z = cz + Math.sin(a) * d
+      const clear = pathDistance(x, z) - (PATH_HALF_WIDTH + 1.4) - 4.4
+      if (clear > 0.8) { if (bd < 0 || d < bd) { bd = d; best = [x, z] } break }
+    }
+  }
+  return best
+}
+
+function PodiumSteps({ x, z, y }: { x: number; z: number; y: number }) {
+  useEffect(() => {
+    const offs = [0, 1, 2].map((k) => addPlatform({ x, z, r: 3.9 - k * 0.55, top: y + 0.3 * (k + 1) }))
+    return () => offs.forEach((o) => o())
+  }, [x, z, y])
+  return null
+}
+
 export function HundredDays() {
   const l = locationById.hundred
-  const [x, z] = l.pos
+  const [x, z] = useMemo(() => podiumSpot(l.pos[0], l.pos[1]), [l.pos])
   const y = at(x, z)
   const ref = useRef<InstancedMesh>(null)
   const lit = useRef<number>(0)
@@ -345,10 +373,17 @@ export function HundredDays() {
     const mesh = ref.current
     if (!mesh) return
     const d = new Object3D()
+    const [cx, cz] = l.pos
     for (let i = 0; i < 100; i++) {
       const a = (i / 100) * Math.PI * 2
-      const px = x + Math.cos(a) * R
-      const pz = z + Math.sin(a) * R
+      const px = cx + Math.cos(a) * R
+      const pz = cz + Math.sin(a) * R
+      // where the road runs through the ring, the posts step aside for it
+      if (pathDistance(px, pz) < PATH_HALF_WIDTH + 2.2) {
+        d.position.set(px, -999, pz); d.scale.setScalar(0); d.updateMatrix(); mesh.setMatrixAt(i, d.matrix); d.scale.setScalar(1)
+        continue
+      }
+      addCollider({ x: px, z: pz, r: 0.22 })
       d.position.set(px, at(px, pz) + 0.55, pz)
       d.rotation.set(0, -a, 0)
       d.updateMatrix()
@@ -387,15 +422,19 @@ export function HundredDays() {
         <meshStandardMaterial color="#1b2422" emissive={MINT} emissiveIntensity={0.7} roughness={0.5} />
       </instancedMesh>
 
-      <mesh castShadow receiveShadow position={[x, y + 0.45, z]}>
-        <cylinderGeometry args={[3.4, 3.9, 0.9, 32]} />
-        <meshStandardMaterial color="#33393b" roughness={0.85} />
-      </mesh>
-      <Text font={DISPLAY_FONT} position={[x, y + 2.4, z]} fontSize={1.5} color="#f2fffb"
+      {/* three broad steps up to the top: climb them, stand on the 100 */}
+      {[0, 1, 2].map((k) => (
+        <mesh key={k} castShadow receiveShadow position={[x, y + 0.15 + k * 0.3, z]}>
+          <cylinderGeometry args={[3.9 - k * 0.55, 3.95 - k * 0.55, 0.3, 40]} />
+          <meshStandardMaterial color={k === 2 ? '#3a4144' : '#33393b'} roughness={0.85} />
+        </mesh>
+      ))}
+      <PodiumSteps x={x} z={z} y={y} />
+      <Text font={DISPLAY_FONT} position={[x, y + 3.2, z]} fontSize={1.5} color="#f2fffb"
         anchorX="center" anchorY="middle" letterSpacing={0.05} outlineWidth={0.02} outlineColor="#0a1512">
         100
       </Text>
-      <Text font={DISPLAY_FONT} position={[x, y + 1.55, z]} fontSize={0.42} color={MINT}
+      <Text font={DISPLAY_FONT} position={[x, y + 2.35, z]} fontSize={0.42} color={MINT}
         anchorX="center" anchorY="middle" letterSpacing={0.2}>
         DAYS OF DISCIPLINE
       </Text>

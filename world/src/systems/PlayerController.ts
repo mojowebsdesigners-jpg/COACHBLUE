@@ -1,6 +1,7 @@
 import { MathUtils } from 'three'
 import { input } from '../lib/input'
 import {
+  ledge,
   PATH_HALF_WIDTH, bridge, groundHeight, pathDistance, resolveCollisions, waterDepthAt, waterSurfaceAt,
 } from '../lib/terrain'
 import { SWIM } from './Swim'
@@ -65,6 +66,8 @@ function angleDelta(a: number, b: number) {
 }
 
 let outOfAir = false
+/** the tallest step a person walks up without jumping */
+const MAX_STEP = 0.45
 
 export function stepPlayer(dt: number): MoveState {
   state.justLanded = false
@@ -126,6 +129,17 @@ export function stepPlayer(dt: number): MoveState {
     const nx = player.pos.x + Math.sin(player.yaw) * step
     const nz = player.pos.z + Math.cos(player.yaw) * step
     const fixed = resolveCollisions(nx, nz, MOVE.radius)
+    // a ledge higher than a stair is a wall: slide along it, never through it
+    if (!player.swimming) {
+      const reach = MOVE.radius * 0.8
+      const probe = (x: number, z: number) =>
+        ledge(player.pos.y, x + Math.sin(player.yaw) * reach, z + Math.cos(player.yaw) * reach) > MAX_STEP
+      if (probe(fixed.x, fixed.z)) {
+        if (!probe(fixed.x, player.pos.z)) fixed.z = player.pos.z
+        else if (!probe(player.pos.x, fixed.z)) fixed.x = player.pos.x
+        else { fixed.x = player.pos.x; fixed.z = player.pos.z }
+      }
+    }
     // running into something bleeds speed off instead of stopping dead
     const moved = Math.hypot(fixed.x - player.pos.x, fixed.z - player.pos.z)
     if (moved < step * 0.35) state.speed *= 0.6

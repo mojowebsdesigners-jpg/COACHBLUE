@@ -5,7 +5,7 @@ import {
   Box3, CanvasTexture, Color, DoubleSide, Group, InstancedMesh, Mesh, MeshStandardMaterial, Object3D, PlaneGeometry,
   RepeatWrapping, SRGBColorSpace, TorusGeometry, Vector3,
 } from 'three'
-import { addCollider, addGrassClear, groundHeight, pathSamples, terrainHeight } from '../../lib/terrain'
+import { addCollider, addDynamicCollider, addGrassClear, groundHeight, pathSamples, terrainHeight } from '../../lib/terrain'
 import { scanned, scannedTexture } from '../../lib/materials'
 import { locationById } from '../../data/journey'
 import { exerciseById } from '../../data/exercises'
@@ -97,6 +97,11 @@ function Boulder({ m }: { m: ReturnType<typeof useYardMaterials> }) {
   }, [scene])
   const ref = useRef<Group>(null)
   const roll = useRef(0)
+  // solid wherever it has got to (not while you are the one pushing it)
+  useEffect(() => addDynamicCollider(() => {
+    const g = ref.current
+    return g && workout.station?.id !== 'boulder' ? { x: g.position.x, z: g.position.z, r: ROCK_R * 0.95 } : null
+  }), [])
   const [rev, setRev] = useState(0)
 
   // the lane: two logs either side, and the start and end marked on the dirt
@@ -167,7 +172,7 @@ function Boulder({ m }: { m: ReturnType<typeof useYardMaterials> }) {
 
   return (
     <group>
-      <group ref={ref}><primitive object={model} /></group>
+      <group ref={ref} userData={{ noCollide: true }}><primitive object={model} /></group>
       {logs.map((l, i) => (
         <mesh key={i} position={[l.mid.x, l.mid.y + 0.12, l.mid.z]} rotation={[0, YAW + Math.PI / 2, Math.PI / 2]}
           material={m.timber} castShadow receiveShadow>
@@ -587,3 +592,17 @@ export function HillSprint() {
 }
 
 useGLTF.preload('/models/boulder.glb')
+
+/** The Boot Camp's activities and the hill sprint, for the map. */
+export function bootCampPoints() {
+  const P = (lx: number, lz: number) => { const [x, z] = place(lx, lz); return { x, z } }
+  return [
+    { id: 'bc-boulder', name: 'Boulder Push', blurb: 'Hold W and drive it down the lane', ...P(LANE.lx + 2, LANE.lz) },
+    { id: 'bc-rope', name: 'Rope Climb', blurb: 'Tap Space for every pull. Ring the bell', ...P(ROPE.lx, ROPE.lz) },
+    { id: 'bc-crawl', name: 'Crawl Net', blurb: 'Down on your elbows', ...P(NET.lx + 2, NET.lz) },
+    { id: 'bc-wall', name: 'Wall Climb', blurb: 'Jump, pull, over, down', ...P(WALL.lx, WALL.lz) },
+    { id: 'bc-tyres', name: 'Tyre Run', blurb: 'High knees, a foot in every tyre', ...P(TYRES.lx + 2, TYRES.lz) },
+    { id: 'bc-cones', name: 'Cone Drill', blurb: 'Six gates against the clock', x: COURSES[0].gates[0].x, z: COURSES[0].gates[0].z },
+    { id: 'bc-hill', name: 'Hill Sprint', blurb: 'Bottom gate to the top, flat out', x: COURSES[1].gates[0].x, z: COURSES[1].gates[0].z },
+  ]
+}
