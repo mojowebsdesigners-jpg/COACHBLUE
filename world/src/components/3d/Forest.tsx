@@ -10,8 +10,7 @@ import {
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import { locations } from '../../data/journey'
 import {
-  addCollider, pathDistance, rand, streamDistanceAt, terrainHeight, terrainNormalY,
-} from '../../lib/terrain'
+  addCollider, pathDistance, rand, streamDistanceAt, terrainHeight, terrainNormalY, gymOutside } from '../../lib/terrain'
 import { player, useStore } from '../../state/store'
 
 export const windTime = { value: 0 }
@@ -117,6 +116,7 @@ export function scatter(count: number, opts: { minPath: number; maxSlope: number
     if (pathDistance(x, z) < opts.minPath) continue
     if (streamDistanceAt(x, z) < 5) continue
     if (locations.some((l) => Math.hypot(x - l.pos[0], z - l.pos[1]) < l.pad + 5)) continue
+    if (gymOutside(x, z) < 3) continue
     const { slope } = terrainNormalY(x, z)
     if (slope > opts.maxSlope) continue
     const y = terrainHeight(x, z)

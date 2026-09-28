@@ -8,7 +8,7 @@ import { faq } from '../../data/faq'
 import { app, pillars, process } from '../../data/programs'
 import { coach } from '../../data/coach'
 import { transformations } from '../../data/transformations'
-import { addBoxFor, addCollider, addGrassClear, groundHeight, pathCurve } from '../../lib/terrain'
+import { GYM, GYM_SLAB_W, GYM_SLAB_D, addBoxFor, addCollider, addGrassClear, groundHeight, pathCurve } from '../../lib/terrain'
 import { player, useStore } from '../../state/store'
 import { registerInteractable } from './InteractionSystem'
 import {
@@ -234,6 +234,20 @@ export function Challenge() {
 }
 
 // ---------------------------------------------------------------- camp
+/**
+ * The app's features, as signs in a row along the front of the gym, between
+ * the carpet and the road, facing the road (they used to stand in a ring
+ * round the camp's centre, which put them on the tarmac and the gym floor).
+ */
+const featureYaw = GYM.angle           // the slab's local +z, towards the road
+function featureSpot(i: number): [number, number] {
+  const n = app.features.length
+  const lx = -GYM_SLAB_W / 2 + 1.8 + (i + 0.5) * ((GYM_SLAB_W - 3.6) / n)
+  const lz = GYM_SLAB_D / 2 + 1.4
+  const c = Math.cos(GYM.angle), s = Math.sin(GYM.angle)
+  return [GYM.cx + lx * c + lz * s, GYM.cz - lx * s + lz * c]
+}
+
 export function TrainingCamp() {
   const l = locationById.camp
   const [x, z] = l.pos
@@ -241,9 +255,7 @@ export function TrainingCamp() {
   useEffect(() => {
     const offs: (() => void)[] = []
     app.features.forEach((f, i) => {
-      const a = (i / app.features.length) * Math.PI * 2
-      const px = x + Math.cos(a) * 13.5
-      const pz = z + Math.sin(a) * 13.5
+      const [px, pz] = featureSpot(i)
       offs.push(registerInteractable({
         id: `camp-${i}`,
         label: `EXPLORE ${f.toUpperCase()}`,
@@ -262,12 +274,10 @@ export function TrainingCamp() {
       {!OFF.has('npcs') && <CampNPCs centre={[x, z]} />}
 
       {app.features.map((f, i) => {
-        const a = (i / app.features.length) * Math.PI * 2
-        const px = x + Math.cos(a) * 13.5
-        const pz = z + Math.sin(a) * 13.5
+        const [px, pz] = featureSpot(i)
         const py = at(px, pz)
         return (
-          <group key={f} position={[px, py, pz]} rotation={[0, -a + Math.PI / 2, 0]}>
+          <group key={f} position={[px, py, pz]} rotation={[0, featureYaw, 0]}>
             <mesh castShadow position={[0, 0.75, 0]}>
               <boxGeometry args={[0.16, 1.5, 0.16]} />
               <meshStandardMaterial color="#4b3c2a" roughness={0.9} />

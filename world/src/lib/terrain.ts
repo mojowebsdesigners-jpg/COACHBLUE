@@ -272,6 +272,87 @@ function rawHeight(x: number, z: number) {
   return h
 }
 
+// ---------------------------------------------------------------- the gym slab
+/**
+ * Where the training compound's slab stands: stepped off the trail beside the
+ * camp and squared to the road, pushed back until every corner is well clear
+ * of the tarmac (the road curves, and a fixed setback let it run across one
+ * corner of the floor). The ground under it is levelled, and the slab's top
+ * is what anyone standing on it stands on.
+ */
+export const GYM_SLAB_W = 21
+export const GYM_SLAB_D = 15
+export const GYM_LIFT = 0.17
+export const GYM = (() => {
+  const camp = locations.find((l) => l.id === 'camp')!
+  const [px, pz] = camp.pos
+  let best = 0, bd = Infinity
+  for (let k = 0; k < pathSamples.length; k++) {
+    const d = (pathSamples[k].x - px) ** 2 + (pathSamples[k].z - pz) ** 2
+    if (d < bd) { bd = d; best = k }
+  }
+  const a = pathSamples[Math.max(0, best - 2)], b = pathSamples[Math.min(pathSamples.length - 1, best + 2)]
+  const len = Math.hypot(b.x - a.x, b.z - a.z) || 1
+  const tx = (b.x - a.x) / len, tz = (b.z - a.z) / len
+  const angle = Math.atan2(-tz, -tx)
+  const c = Math.cos(angle), s = Math.sin(angle)
+  const clear = PATH_HALF_WIDTH + 1.4 + 1.8
+  // Try places near the original spot (13 m back from the trail, opposite the
+  // camp): further back, or slid along the road, and keep the one closest to
+  // the original that is clear of the road, the pool and the lake, and flat.
+  let pick = { cx: px - tz * 13, cz: pz + tx * 13, score: Infinity, setback: 13 }
+  for (let setback = 13; setback <= 20; setback += 1) {
+    for (let slide = -14; slide <= 14; slide += 1) {
+      const cx = px - tz * setback + tx * slide, cz = pz + tx * setback + tz * slide
+      let ok = true
+      let lo = Infinity, hi = -Infinity
+      for (let i = 0; i <= 8 && ok; i++) for (let j = 0; j <= 6 && ok; j++) {
+        const lx = -GYM_SLAB_W / 2 + (i / 8) * GYM_SLAB_W, lz = -GYM_SLAB_D / 2 + (j / 6) * GYM_SLAB_D
+        const x = cx + lx * c + lz * s, z = cz - lx * s + lz * c
+        if (distTo(x, z) < clear) ok = false
+        const pl = poolLocal(x, z)
+        if (Math.abs(pl.lx) < POOL.hx + POOL.deck + 4 && Math.abs(pl.lz) < POOL.hz + POOL.deck + 4) ok = false
+        if (Math.hypot(x - LAKE.x, z - LAKE.z) < LAKE.r * 1.25 + 6) ok = false
+        const h = rawHeight(x, z)
+        lo = Math.min(lo, h); hi = Math.max(hi, h)
+      }
+      if (!ok) continue
+      const score = Math.abs(slide) * 0.6 + (setback - 13) * 1.0 + (hi - lo) * 2.5
+      if (score < pick.score) pick = { cx, cz, score, setback }
+    }
+  }
+  const { cx, cz, setback } = pick
+  return { cx, cz, angle, setback }
+})()
+function distTo(x: number, z: number) {
+  let best = Infinity
+  for (let k = 0; k < pathSamples.length; k += 2) {
+    const d = (pathSamples[k].x - x) ** 2 + (pathSamples[k].z - z) ** 2
+    if (d < best) best = d
+  }
+  return Math.sqrt(best)
+}
+/** Slab-local coordinates (x along the front, z towards the road) of a world point. */
+export function gymLocal(x: number, z: number) {
+  const dx = x - GYM.cx, dz = z - GYM.cz
+  const c = Math.cos(GYM.angle), s = Math.sin(GYM.angle)
+  return { lx: dx * c - dz * s, lz: dx * s + dz * c }
+}
+/** How far outside the slab a point is (negative inside). */
+export function gymOutside(x: number, z: number) {
+  const { lx, lz } = gymLocal(x, z)
+  const ox = Math.abs(lx) - GYM_SLAB_W / 2, oz = Math.abs(lz) - GYM_SLAB_D / 2
+  return ox > 0 || oz > 0 ? Math.hypot(Math.max(ox, 0), Math.max(oz, 0)) : Math.max(ox, oz)
+}
+let _gymBase: number | null = null
+/** The levelled ground under the slab. */
+export function gymBase() {
+  if (_gymBase === null) _gymBase = rawHeight(GYM.cx, GYM.cz)
+  return _gymBase
+}
+/** The top of the slab: where feet go. */
+export const gymFloorY = () => gymBase() + GYM_LIFT
+
 // Location pads are levelled to the terrain height at their centre.
 const padHeights = new Map<string, number>()
 for (const l of locations) padHeights.set(l.id, rawHeight(l.pos[0], l.pos[1]))
@@ -332,6 +413,13 @@ function terrainHeightExact(x: number, z: number): number {
     }
   }
 
+  // level the ground under the gym slab and a margin round it
+  const go = gymOutside(x, z)
+  if (go < 7) {
+    const w = 1 - smoothstep(1.2, 7, go)
+    h += (gymBase() - h) * w
+  }
+
   // carve the stream (not where the bridge crosses); the channel itself is
   // scoured deeper, so the middle of the stream is over your head
   const sd = streamDistance(x, z)
@@ -374,6 +462,8 @@ export function terrainNormalY(x: number, z: number) {
 /** Ground the player walks on: terrain, or the bridge deck when over the stream. */
 export function groundHeight(x: number, z: number) {
   if (onBridge(x, z)) return bridgeDeckAt(x, z) + ROAD_LIFT
+  // on the gym slab, stand on its top, not the ground under it
+  if (gymOutside(x, z) < 0) return gymFloorY()
   const pl = poolLocal(x, z)
   if (Math.abs(pl.lx) < POOL.hx && Math.abs(pl.lz) < POOL.hz) return poolFloorAt(pl.lx)
   if (Math.abs(pl.lx) < POOL.hx + POOL.deck && Math.abs(pl.lz) < POOL.hz + POOL.deck) return poolDeckHeight()

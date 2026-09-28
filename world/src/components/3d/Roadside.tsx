@@ -12,7 +12,7 @@ import { coach } from '../../data/coach'
 import { app, hundredDays, pillars } from '../../data/programs'
 import { locations } from '../../data/journey'
 import { scanned } from '../../lib/materials'
-import { addCollider, bridge, groundHeight, pathCurve, streamDistanceAt } from '../../lib/terrain'
+import { addCollider, bridge, groundHeight, gymOutside, pathCurve, streamDistanceAt } from '../../lib/terrain'
 import { player, useStore } from '../../state/store'
 import { registerInteractable } from './InteractionSystem'
 import { BODY_FONT, DISPLAY_FONT, MINT } from './Props'
@@ -312,8 +312,9 @@ function clearOfStops(x: number, z: number) {
   for (const l of locations) {
     if (Math.hypot(x - l.pos[0], z - l.pos[1]) < l.pad + 2) return false
   }
-  // and out of the water, off the pool deck and the lake shore
+  // and out of the water, off the pool deck and the lake shore, and off the gym
   if (streamDistanceAt(x, z) < 4) return false
+  if (gymOutside(x, z) < 4) return false
   return Math.hypot(x - bridge.x, z - bridge.z) > 12
 }
 

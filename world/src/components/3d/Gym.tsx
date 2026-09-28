@@ -2,9 +2,11 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { useGLTF } from '@react-three/drei'
 import {
-  Group, Mesh, MeshStandardMaterial, RepeatWrapping, SRGBColorSpace,
-  TextureLoader, Vector2, Vector3, Box3 } from 'three'
-import { addBoxFor, addCollider, groundHeight, pathSamples } from '../../lib/terrain'
+  Group, Mesh, MeshStandardMaterial, SRGBColorSpace,
+  CanvasTexture, Vector3, Box3 } from 'three'
+import {
+  GYM, GYM_LIFT, GYM_SLAB_D, GYM_SLAB_W, addBoxFor, addCollider, gymFloorY,
+} from '../../lib/terrain'
 import {
   CalisthenicsRig, ChestPress, ChipBorder, CurveTreadmill, LatPulldown, LegPress, PicnicTable, RIG, useKitMaterials,
 } from './OutdoorKit'
@@ -32,35 +34,52 @@ import { useStore as useGlobalStore } from '../../state/store'
  */
 
 // slab dimensions and how it sits relative to the location centre
-const SLAB_W = 21
-const SLAB_D = 15
-const SETBACK = 13          // how far off the trail the compound is built
-export const LIFT = 0.17    // clears the road, which is laid at terrain + 0.07
+const SLAB_W = GYM_SLAB_W
+const SLAB_D = GYM_SLAB_D
+export const LIFT = GYM_LIFT
 
 // grip heights straight from tools/gym_kit.py
 const BENCH_PAD = 0.50       // top of the pad, not its centre
 const TREADMILL_BELT = 0.255 // top of the belt
 
 // ------------------------------------------------------------------ helpers
-function useRubber() {
+/**
+ * The floor: a soft, deep-red gym carpet over the whole slab.
+ *
+ * Drawn once into a canvas the size of the floor (a texel every 2.5 cm), so
+ * it never tiles and has no fine repeating grain to shimmer into lines at a
+ * distance, which is what the old rubber texture did. Soft low-contrast
+ * fibre, a lighter lane down the middle where people walk, and a mint
+ * border inset from the edge.
+ */
+function useCarpet() {
   return useMemo(() => {
-    const loader = new TextureLoader()
-    const load = (f: string, srgb = false) => {
-      const t = loader.load(`/tex/${f}.webp`)
-      t.wrapS = t.wrapT = RepeatWrapping
-      t.repeat.set(SLAB_W / 2, SLAB_D / 2)     // one tile per metre
-      t.anisotropy = 8
-      if (srgb) t.colorSpace = SRGBColorSpace
-      return t
+    const PX = 40                                    // texels per metre
+    const W = Math.round(SLAB_W * PX / 2), H = Math.round(SLAB_D * PX / 2)   // half-res, filtered up
+    const c = document.createElement('canvas')
+    c.width = W; c.height = H
+    const g = c.getContext('2d')!
+    g.fillStyle = '#8c1d2a'
+    g.fillRect(0, 0, W, H)
+    // fibre: many faint soft blotches, darker and lighter reds
+    let seed = 5
+    const r = () => ((seed = (seed * 16807) % 2147483647) - 1) / 2147483646
+    for (let i = 0; i < 9000; i++) {
+      const x = r() * W, y = r() * H, rad = 0.6 + r() * 2.2
+      g.fillStyle = r() < 0.5 ? `rgba(60,8,16,${0.05 + r() * 0.07})` : `rgba(190,60,72,${0.04 + r() * 0.06})`
+      g.beginPath(); g.arc(x, y, rad, 0, Math.PI * 2); g.fill()
     }
-    return new MeshStandardMaterial({
-      map: load('rubber_diff', true),
-      normalMap: load('rubber_nor'),
-      roughnessMap: load('rubber_rough'),
-      normalScale: new Vector2(0.55, 0.55),
-      roughness: 1,
-      metalness: 0,
-    })
+    // a lighter walkway down the middle, and a mint border line
+    const m = PX / 2
+    g.fillStyle = 'rgba(200,70,82,0.18)'
+    g.fillRect(W * 0.5 - 1.2 * m, 0, 2.4 * m, H)
+    g.strokeStyle = 'rgba(29,233,182,0.75)'
+    g.lineWidth = 0.08 * m
+    g.strokeRect(0.35 * m, 0.35 * m, W - 0.7 * m, H - 0.7 * m)
+    const t = new CanvasTexture(c)
+    t.colorSpace = SRGBColorSpace
+    t.anisotropy = 8
+    return new MeshStandardMaterial({ map: t, roughness: 0.96, metalness: 0, color: '#ffffff' })
   }, [])
 }
 
@@ -213,24 +232,8 @@ function Floodlight({ at, y, aim }: { at: [number, number]; y: number; aim: [num
  * and square it to the road instead: the trail then runs past the front of it,
  * the way it would past somewhere that was actually built here.
  */
-export function gymPlacement(centre: [number, number]) {
-  let best = Infinity
-  let i = 0
-  for (let k = 0; k < pathSamples.length; k++) {
-    const d = (pathSamples[k].x - centre[0]) ** 2 + (pathSamples[k].z - centre[1]) ** 2
-    if (d < best) { best = d; i = k }
-  }
-  const a = pathSamples[Math.max(0, i - 2)]
-  const b = pathSamples[Math.min(pathSamples.length - 1, i + 2)]
-  const len = Math.hypot(b.x - a.x, b.z - a.z) || 1
-  const tx = (b.x - a.x) / len
-  const tz = (b.z - a.z) / len
-  return {
-    // perpendicular to the trail, far enough that the verge stays clear
-    cx: centre[0] - tz * SETBACK,
-    cz: centre[1] + tx * SETBACK,
-    angle: Math.atan2(-tz, -tx),      // local +z faces back towards the road
-  }
+export function gymPlacement(_centre?: [number, number]) {
+  return { cx: GYM.cx, cz: GYM.cz, angle: GYM.angle }
 }
 
 /** The belt: the player's pace when they are on it, the client's jog when she is. */
@@ -246,8 +249,8 @@ export function Gym({ centre }: { centre: [number, number] }) {
   const kit = useKitMaterials()
   const { cx, cz, angle } = useMemo(() => gymPlacement(centre), [centre])
 
-  const floorY = groundHeight(cx, cz) + LIFT
-  const rubber = useRubber()
+  const floorY = gymFloorY()
+  const rubber = useCarpet()
 
   // local → world, so everything shares one floor grid
   const place = useMemo(() => {
@@ -278,7 +281,9 @@ export function Gym({ centre }: { centre: [number, number] }) {
     curl: place(5.4, 3.2),
     // the treadmill is turned side-on, so its belt runs along local x and the
     // runner stands behind the console rather than off the side of the belt
-    treadRun: place(-8.95, -0.6),
+    // on the belt, just behind its middle (the belt runs along the slab's z,
+    // console towards the back wall, so behind is +z)
+    treadRun: place(-8.4, -0.45),
     mirror: place(9.4, -4.6),
     wall: place(0, -6.9),
     flood: [place(-9.8, -6.6), place(9.8, -6.6), place(-9.8, 6.6), place(9.8, 6.6)] as [number, number][],
@@ -315,7 +320,7 @@ export function Gym({ centre }: { centre: [number, number] }) {
       st('gym-kb', 'kettlebell_swing', place(3.2, 3.6), angle),
       st('gym-airsquat', 'air_squat', place(5.2, -2.4), angle - 0.4),
       // cardio
-      st('gym-tread', 'treadmill_run', place(-8.95, -0.6), angle + Math.PI / 2,
+      st('gym-tread', 'treadmill_run', place(-8.4, -0.45), angle + Math.PI,
          { ground: floorY + TREADMILL_BELT, occupiedBy: 'client-a' }),
     ]
   }, [place, floorY, angle])
@@ -360,11 +365,12 @@ export function Gym({ centre }: { centre: [number, number] }) {
     <group>
       {/* ---------------------------------------------------------- floor */}
       <group position={[cx, floorY, cz]} rotation={[0, angle, 0]}>
-        <mesh receiveShadow rotation={[-Math.PI / 2, 0, 0]} material={rubber}>
+        {/* the carpet, a hair above the slab's own top so the two never fight */}
+        <mesh receiveShadow rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.006, 0]} material={rubber}>
           <planeGeometry args={[SLAB_W, SLAB_D]} />
         </mesh>
         {/* poured edge, so the slab has thickness from a standing eye height */}
-        <mesh position={[0, -LIFT / 2, 0]} receiveShadow castShadow>
+        <mesh position={[0, -LIFT / 2 - 0.004, 0]} receiveShadow castShadow>
           <boxGeometry args={[SLAB_W + 0.24, LIFT, SLAB_D + 0.24]} />
           <meshStandardMaterial color="#1a1c1e" roughness={0.95} />
         </mesh>
@@ -455,7 +461,7 @@ export function Gym({ centre }: { centre: [number, number] }) {
       {/* client running the treadmill, feet on the belt */}
       <Athlete
         position={spots.treadRun}
-        rotation={angle + Math.PI / 2}
+        rotation={angle + Math.PI}
         exercise="run"
         y={floorY + TREADMILL_BELT}
         speed={1}

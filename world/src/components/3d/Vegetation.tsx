@@ -10,8 +10,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { createNoise2D } from 'simplex-noise'
 import { locations } from '../../data/journey'
 import {
-  addCollider, pathDistance, rand, streamDistanceAt, terrainHeight, terrainNormalY,
-} from '../../lib/terrain'
+  addCollider, pathDistance, rand, streamDistanceAt, terrainHeight, terrainNormalY, gymOutside } from '../../lib/terrain'
 import { useStore } from '../../state/store'
 import { applyWind } from './Forest'
 
@@ -145,6 +144,7 @@ function scatterClustered(count: number, opts: {
     if (pathDistance(x, z) < opts.minPath) continue
     if (streamDistanceAt(x, z) < 4.5) continue
     if (locations.some((l) => Math.hypot(x - l.pos[0], z - l.pos[1]) < l.pad + 4)) continue
+    if (gymOutside(x, z) < 3) continue
     const { slope } = terrainNormalY(x, z)
     if (slope > opts.maxSlope) continue
     const y = terrainHeight(x, z)

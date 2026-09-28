@@ -9,8 +9,7 @@ import { createNoise2D } from 'simplex-noise'
 import { locations } from '../../data/journey'
 import { foliage, scanned } from '../../lib/materials'
 import {
-  addCollider, forestDensity, forestNoise, pathDistance, rand, streamDistanceAt, terrainHeight, terrainNormalY,
-} from '../../lib/terrain'
+  addCollider, forestDensity, forestNoise, pathDistance, rand, streamDistanceAt, terrainHeight, terrainNormalY, gymOutside } from '../../lib/terrain'
 import { useStore } from '../../state/store'
 import { applyWind } from './Forest'
 
@@ -188,6 +187,7 @@ function scatter(count: number, opts: { minPath: number; maxSlope: number; bias?
     if (pathDistance(x, z) < opts.minPath) continue
     if (streamDistanceAt(x, z) < 4.5) continue
     if (locations.some((l) => Math.hypot(x - l.pos[0], z - l.pos[1]) < l.pad + 4)) continue
+    if (gymOutside(x, z) < 3) continue
     const { slope } = terrainNormalY(x, z)
     if (slope > opts.maxSlope) continue
     const y = terrainHeight(x, z)
@@ -352,6 +352,7 @@ export function Undergrowth() {
         if (forestDensity(x, z) < minDensity + rand() * 0.2) continue
         if (pathDistance(x, z) < 6 || streamDistanceAt(x, z) < 3) continue
         if (locations.some((l) => Math.hypot(x - l.pos[0], z - l.pos[1]) < l.pad + 2)) continue
+        if (gymOutside(x, z) < 3) continue
         if (terrainNormalY(x, z).slope > 0.8) continue
         dummy.position.set(x, terrainHeight(x, z) - 0.05, z)
         dummy.rotation.set(0, rand() * Math.PI * 2, 0)

@@ -2,14 +2,14 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { useGLTF } from '@react-three/drei'
 import { Box3, Mesh, Vector3, type Object3D } from 'three'
-import { groundHeight, POOL, poolDeckHeight } from '../../lib/terrain'
+import { groundHeight, gymFloorY, POOL, poolDeckHeight } from '../../lib/terrain'
 import { hideInstance } from '../../lib/instanceCull'
 import { locationById } from '../../data/journey'
 import { player, useStore } from '../../state/store'
 import { consume, hand, pickUp, putDown } from '../../systems/HandAction'
 import { registerInteractable } from './InteractionSystem'
 import { mushrooms } from './Vegetation'
-import { LIFT, gymPlacement } from './Gym'
+import { gymPlacement } from './Gym'
 
 /**
  * Everything small enough to pick up: mushrooms on the woodland floor and
@@ -28,7 +28,7 @@ function initialBottles(): Bottle[] {
   // on the rubber floor by the bench, where someone left it between sets
   {
     const [x, z] = place(0.6, 3.0)
-    out.push({ id: id++, x, z, y: groundHeight(cx, cz) + LIFT })
+    out.push({ id: id++, x, z, y: gymFloorY() })
   }
   // a water station: three on the picnic table
   for (const dx of [-0.35, 0, 0.35]) {
