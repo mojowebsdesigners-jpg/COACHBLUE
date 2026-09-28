@@ -6,7 +6,13 @@
 export type MapKind =
   | 'place' | 'gym' | 'water' | 'car' | 'fun' | 'sport' | 'rest' | 'food' | 'secret' | 'coach'
 
-export type MapPoint = { id: string; name: string; x: number; z: number; kind: MapKind; blurb?: string }
+export type MapPoint = {
+  id: string; name: string; x: number; z: number; kind: MapKind; blurb?: string
+  /** one of a crowd (the fun park's activities): drawn only once zoomed in */
+  group?: string
+}
+/** How far in the map must be zoomed before a group's own icons show. */
+export const GROUP_ZOOM = 2.6
 
 const points = new Map<string, MapPoint>()
 type Listener = () => void

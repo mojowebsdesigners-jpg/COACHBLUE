@@ -70,6 +70,26 @@ export const vehicle = {
   contact: [0, 0, 0, 0],
   /** what the car is rolling on: 0 tarmac, 1 grass, 2 dirt */
   surface: 0,
+  /**
+   * Off the ground: over a ramp's lip or a crest taken fast, the car flies on
+   * its own momentum until it comes down. `vy` is its vertical speed (on the
+   * ground, how fast the road under it is rising), `airTime` how long it has
+   * been up.
+   */
+  air: false,
+  vy: 0,
+  airTime: 0,
+  lastMid: 0,
+  lastX: 0,
+  lastZ: 0,
+}
+
+type Landing = { airTime: number; impact: number; x: number; z: number }
+const landingListeners = new Set<(l: Landing) => void>()
+/** Told each time the car comes back down after a proper jump. */
+export function onCarLanding(fn: (l: Landing) => void) {
+  landingListeners.add(fn)
+  return () => { landingListeners.delete(fn) }
 }
 
 /**
@@ -171,14 +191,64 @@ function settleOnGround(dt: number, snap = false) {
   const tp = -Math.atan2(front - rear, CAR.wheelBase)
   const tr = Math.atan2(left - right, CAR.track)
   const mid = (h[0] + h[1] + h[2] + h[3]) / 4
+  const step = Math.min(dt, 1 / 30)
+
+  if (!snap && vehicle.air) {
+    // flying: gravity, the nose dipping to follow the arc
+    vehicle.vy -= 9.8 * step
+    vehicle.lift += vehicle.vy * step
+    vehicle.airTime += step
+    const arc = Math.atan2(vehicle.vy, Math.max(4, Math.abs(vehicle.speed)))
+    vehicle.groundPitch = MathUtils.damp(vehicle.groundPitch, -arc * 0.7, 2.2, step)
+    vehicle.groundRoll = MathUtils.damp(vehicle.groundRoll, 0, 2, step)
+    if (vehicle.lift <= mid) {
+      // down: the springs take the blow, the tyres bite again
+      const impact = -vehicle.vy
+      vehicle.air = false
+      vehicle.lift = mid
+      vehicle.liftVel = -impact * 0.45
+      vehicle.pitchVel = (tp - vehicle.groundPitch) * 4
+      vehicle.speed *= impact > 6 ? 0.88 : 0.96
+      if (vehicle.airTime > 0.35) landingListeners.forEach((fn) => fn({ airTime: vehicle.airTime, impact, x: vehicle.pos.x, z: vehicle.pos.z }))
+      vehicle.vy = 0
+      vehicle.lastMid = mid
+    } else {
+      vehicle.pos.y = vehicle.lift
+      for (let i = 0; i < 4; i++) vehicle.susp[i] = -CAR.travel
+      return
+    }
+  } else if (!snap) {
+    // did the ground fall away faster than the car can follow it? Then it
+    // is airborne, carrying the climb it had
+    // (metres in one frame is the car being moved — fast travel, a reset,
+    // bringing it to you — not the road rising, so it carries no climb)
+    const moved = Math.hypot(vehicle.pos.x - vehicle.lastX, vehicle.pos.z - vehicle.lastZ)
+    if (moved > 3) { vehicle.lastMid = mid; vehicle.vy = 0 }
+    const groundVy = (mid - vehicle.lastMid) / Math.max(step, 1e-3)
+    const coast = vehicle.lift + vehicle.vy * step - 4.9 * step * step
+    if (vehicle.vy > 1.4 && coast > mid + 0.2) {
+      vehicle.air = true
+      vehicle.airTime = 0
+      vehicle.lastMid = mid
+      vehicle.lift = coast
+      vehicle.pos.y = coast
+      for (let i = 0; i < 4; i++) vehicle.susp[i] = -CAR.travel
+      return
+    }
+    vehicle.vy = MathUtils.damp(vehicle.vy, groundVy, 12, step)
+  }
+  vehicle.lastMid = mid
+  vehicle.lastX = vehicle.pos.x
+  vehicle.lastZ = vehicle.pos.z
 
   if (snap) {
     vehicle.groundPitch = tp
     vehicle.groundRoll = tr
     vehicle.lift = mid
     vehicle.liftVel = vehicle.pitchVel = vehicle.rollVel = 0
+    vehicle.air = false
+    vehicle.vy = 0
   } else {
-    const step = Math.min(dt, 1 / 30)
     ;[vehicle.groundPitch, vehicle.pitchVel] = spring(vehicle.groundPitch, vehicle.pitchVel, tp, 140, 20, step)
     ;[vehicle.groundRoll, vehicle.rollVel] = spring(vehicle.groundRoll, vehicle.rollVel, tr, 160, 22, step)
     ;[vehicle.lift, vehicle.liftVel] = spring(vehicle.lift, vehicle.liftVel, mid, 180, 22, step)
@@ -209,21 +279,23 @@ export function stepVehicle(dt: number) {
   vehicle.steer = MathUtils.damp(vehicle.steer, steerInput, 8, dt)
 
   // ---- longitudinal ----------------------------------------------------
-  if (throttle > 0) {
+  // in the air the wheels have nothing to push on or steer against
+  const grip = vehicle.air ? 0 : 1
+  if (grip === 0) { /* flying */ } else if (throttle > 0) {
     vehicle.speed += CAR.accel * dt * (1 - speedFrac * 0.65)
   } else if (throttle < 0) {
     vehicle.speed -= (vehicle.speed > 0.5 ? CAR.brake : CAR.accel * 0.6) * dt
   }
   // the handbrake scrubs speed gently: at pace it is for turning, not stopping
-  if (vehicle.handbrake) vehicle.speed = MathUtils.damp(vehicle.speed, 0, Math.abs(vehicle.speed) > 6 ? 1.6 : 6, dt)
+  if (vehicle.handbrake && grip) vehicle.speed = MathUtils.damp(vehicle.speed, 0, Math.abs(vehicle.speed) > 6 ? 1.6 : 6, dt)
 
   // hills: gravity along the car's pitch slows a climb and speeds a descent
-  vehicle.speed += 9.8 * Math.sin(vehicle.groundPitch) * dt * 0.55
+  vehicle.speed += 9.8 * Math.sin(vehicle.groundPitch) * dt * 0.55 * grip
 
   // drag and rolling resistance; grass and dirt hold a road car back
   const sign = Math.sign(vehicle.speed)
   const soft = vehicle.surface === 0 ? 1 : vehicle.surface === 1 ? 2.2 : 1.8
-  vehicle.speed -= sign * (CAR.rollingResistance * soft + Math.abs(vehicle.speed) * CAR.drag * 0.12 * soft) * dt
+  vehicle.speed -= sign * (CAR.rollingResistance * soft * grip + Math.abs(vehicle.speed) * CAR.drag * 0.12 * soft) * dt
   if (Math.abs(vehicle.speed) < 0.05) vehicle.speed = 0
   vehicle.speed = MathUtils.clamp(vehicle.speed, -CAR.reverseSpeed, CAR.maxSpeed)
 
@@ -232,7 +304,7 @@ export function stepVehicle(dt: number) {
   // a handbrake turn swings the tail round: the rear lets go and the car
   // rotates faster than its wheels are pointing, the GTA move
   const slide = vehicle.handbrake && Math.abs(vehicle.speed) > 6 ? 1.9 : 1
-  const turn = vehicle.steer * steerRate * slide * dt * Math.min(1, Math.abs(vehicle.speed) / 3) * Math.sign(vehicle.speed || 1)
+  const turn = grip * vehicle.steer * steerRate * slide * dt * Math.min(1, Math.abs(vehicle.speed) / 3) * Math.sign(vehicle.speed || 1)
   vehicle.yaw -= turn
 
   // ---- translate -------------------------------------------------------
@@ -248,7 +320,11 @@ export function stepVehicle(dt: number) {
     let hit = false
     for (const side of [-0.85, 0, 0.85]) {
       const x = fixed.x + fx * 2.35 + fz * side, z = fixed.z + fz * 2.35 - fx * side
-      if (ledge(vehicle.pos.y, x, z) > 0.3) { hit = true; break }
+      // a step is a sudden rise at the probe, against the ground just short
+      // of it: a ramp's slope is driven up, its sides and a kerb are not
+      // (in the air, against the car itself: it can land on top, not in)
+      const from = vehicle.air ? vehicle.pos.y : groundHeight(x - fx * 0.4, z - fz * 0.4)
+      if (ledge(from, x, z) > 0.3) { hit = true; break }
     }
     if (hit) {
       fixed.x = vehicle.pos.x

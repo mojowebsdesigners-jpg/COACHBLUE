@@ -6,7 +6,7 @@ import {
 import { player, useStore } from '../../state/store'
 import { vehicle } from '../../systems/VehicleController'
 import { travelTo } from '../../systems/FastTravel'
-import { MAP_ICON, mapPoints, onMapPoints, type MapPoint } from '../../systems/MapPoints'
+import { GROUP_ZOOM, MAP_ICON, mapPoints, onMapPoints, type MapPoint } from '../../systems/MapPoints'
 
 /**
  * The map, GTA-style: the whole valley laid out flat, big, and alive.
@@ -108,8 +108,9 @@ function usePoints() {
   // the journey's places are always there; everything else registers itself
   const fixed: MapPoint[] = useMemo(() => locations.map((l) => ({
     id: `loc-${l.id}`, name: l.name, x: l.pos[0], z: l.pos[1],
-    kind: l.id === 'coach' ? 'coach' : l.id === 'bootcamp' ? 'sport' : 'place',
-  })), [])
+    kind: l.id === 'coach' ? 'coach' : l.id === 'bootcamp' ? 'sport' : l.id === 'funpark' ? 'fun' : l.id === 'stunts' ? 'car' : 'place',
+    blurb: l.id === 'funpark' ? 'Nineteen things to play — zoom in' : l.id === 'stunts' ? 'Ramp, donuts, car bowling — zoom in' : undefined,
+  } as MapPoint)), [])
   return { points: [...fixed, ...mapPoints()], discovered }
 }
 
@@ -174,6 +175,7 @@ export function MiniMap() {
       // icons
       const t = performance.now() / 1000
       for (const p of points) {
+        if (p.group && view.current.zoom < GROUP_ZOOM) continue
         const { sx, sy } = toScreen(p.x, p.z)
         if (sx < -20 || sy < -20 || sx > S + 20 || sy > S + 20) continue
         const icon = MAP_ICON[p.kind]
@@ -237,6 +239,7 @@ export function MiniMap() {
   const pick = (sx: number, sy: number) => {
     let best: MapPoint | null = null, bd = 18 * 18
     for (const p of points) {
+      if (p.group && view.current.zoom < GROUP_ZOOM) continue
       const s = toScreen(p.x, p.z)
       const d = (s.sx - sx) ** 2 + (s.sy - sy) ** 2
       if (d < bd) { bd = d; best = p }

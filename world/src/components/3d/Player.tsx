@@ -359,6 +359,10 @@ export function Player() {
         bones, group: g, exercise: st.def.pose, position: st.spot,
         rotation: st.yaw, ground: st.ground, phase: workout.phase,
         grip: st.grip, barHeight: st.barHeight, progress: workout.distance,
+        extra: {
+          charge: workout.charging ? workout.charge : workout.power, action: workout.action,
+          belt: workout.belt, custom: st.custom?.a ?? workout.distance, custom2: st.custom?.b, credits: workout.credits,
+        },
       })
       if (w < 1) blend.mix(g, w)
       if (st.def.pose === 'run') alignFeet(bones, g, () => st.ground, Math.min(delta, 0.05))

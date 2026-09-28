@@ -461,13 +461,13 @@ export function terrainNormalY(x: number, z: number) {
 
 /**
  * Raised things you can stand on — a podium, a step, a stage. Each is a
- * circle or a box with a flat top. groundHeight() stands you on the highest
+ * circle or a box with a flat top (or a ramp, rising along the box). groundHeight() stands you on the highest
  * one under you, and movement refuses to climb a step higher than a body
  * (or a car) can, so nothing solid can ever be walked or driven through.
  */
 export type Platform =
   | { x: number; z: number; r: number; top: number }
-  | { x: number; z: number; hx: number; hz: number; angle: number; top: number }
+  | { x: number; z: number; hx: number; hz: number; angle: number; top: number; rise?: number }
 const platforms = new Set<Platform>()
 export function addPlatform(p: Platform) {
   platforms.add(p)
@@ -481,7 +481,11 @@ function platformTop(x: number, z: number) {
       if (dx * dx + dz * dz <= p.r * p.r) top = Math.max(top, p.top)
     } else {
       const c = Math.cos(p.angle), s = Math.sin(p.angle)
-      if (Math.abs(dx * c - dz * s) <= p.hx && Math.abs(dx * s + dz * c) <= p.hz) top = Math.max(top, p.top)
+      const lz = dx * s + dz * c
+      if (Math.abs(dx * c - dz * s) <= p.hx && Math.abs(lz) <= p.hz) {
+        // a ramp climbs `rise` from its back edge (-hz) to its lip (+hz)
+        top = Math.max(top, p.rise ? p.top + ((lz + p.hz) / (2 * p.hz)) * p.rise : p.top)
+      }
     }
   }
   return top
@@ -500,7 +504,8 @@ export function groundHeight(x: number, z: number) {
   return Math.max(baseGround(x, z), platformTop(x, z))
 }
 
-function baseGround(x: number, z: number) {
+/** The ground itself, without anything raised on it (for placing platforms). */
+export function baseGround(x: number, z: number) {
   if (onBridge(x, z)) return bridgeDeckAt(x, z) + ROAD_LIFT
   // on the gym slab, stand on its top, not the ground under it
   if (gymOutside(x, z) < 0) return gymFloorY()

@@ -6,7 +6,7 @@ import {
 } from 'three'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import {
-  LAKE, addCollider, addGrassClear, lakeEdgeDistance, lakeLevel, lakeRadius, terrainHeight,
+  LAKE, addCollider, addPlatform, addGrassClear, lakeEdgeDistance, lakeLevel, lakeRadius, terrainHeight,
 } from '../../lib/terrain'
 import { scannedTexture } from '../../lib/materials'
 import { registerSeat } from './Seats'
@@ -218,7 +218,8 @@ function Beach() {
 // ---------------------------------------------------------------- the jetty
 const JETTY_A = 2.6       // the direction from the lake's middle it runs out along
 
-function Jetty() {
+/** Where the jetty is: its shore end, the way it points, its deck and size. */
+export function jettyFrame() {
   const len = 9, w = 1.6
   const a = JETTY_A
   const shore = lakeRadius(a) + 2.5
@@ -226,6 +227,14 @@ function Jetty() {
   const x0 = LAKE.x + Math.cos(a) * shore, z0 = LAKE.z + Math.sin(a) * shore
   const yaw = Math.atan2(-Math.cos(a), -Math.sin(a))          // pointing out into the lake
   const deck = Math.max(LEVEL() + 0.55, terrainHeight(x0, z0) + 0.25)
+  /** a point `along` metres out and `side` metres across */
+  const at = (along: number, side = 0): [number, number] =>
+    [x0 + Math.sin(yaw) * along + Math.cos(yaw) * side, z0 + Math.cos(yaw) * along - Math.sin(yaw) * side]
+  return { len, w, x0, z0, yaw, deck, at }
+}
+
+function Jetty() {
+  const { len, w, x0, z0, yaw, deck } = jettyFrame()
   const mats = useMemo(() => ({
     plank: new MeshStandardMaterial({
       map: scannedTexture('deck_diff', 1, true), normalMap: scannedTexture('deck_nor', 1),
@@ -234,15 +243,19 @@ function Jetty() {
     post: new MeshStandardMaterial({ color: '#5c4531', roughness: 0.9 }),
   }), [])
   useEffect(() => {
-    // you can walk out along it: a raised floor is not modelled, so it is a
-    // seat at the end instead, legs over the water
+    // you walk out along it on its planks, and can sit at the end with your
+    // legs over the water
+    const offDeck = addPlatform({
+      x: x0 + Math.sin(yaw) * (len / 2 + 0.2), z: z0 + Math.cos(yaw) * (len / 2 + 0.2),
+      hx: w / 2, hz: len / 2, angle: yaw, top: deck + 0.03,
+    })
     const ex = x0 + Math.sin(yaw) * (len - 0.3), ez = z0 + Math.cos(yaw) * (len - 0.3)
     addGrassClear(x0, z0, 1.5)
     const off = registerSeat({ id: 'jetty', at: [ex, ez], ground: deck - 0.45, yaw, height: 0.45, label: 'SIT ON THE JETTY' })
     for (const s of [-1, 1]) {
       addCollider({ x: x0 + Math.cos(yaw) * s * (w / 2 + 0.1), z: z0 - Math.sin(yaw) * s * (w / 2 + 0.1), r: 0.12 })
     }
-    return off
+    return () => { off(); offDeck() }
   }, [deck, x0, z0, yaw])
   return (
     <group position={[x0, deck, z0]} rotation={[0, yaw, 0]}>

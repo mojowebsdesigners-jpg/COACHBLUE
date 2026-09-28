@@ -63,6 +63,14 @@ export type Station = {
   onRep?: (reps: number) => void
   /** power moves: the moment of release, at the power chosen (0..1) */
   onRelease?: (power: number) => void
+  /** power moves: the move has played out (he has landed, the dart is in) */
+  onActionEnd?: () => void
+  /** power moves: the band of the meter that is dead on (drawn green) */
+  sweet?: [number, number]
+  /** a live gauge for the HUD: line tension, height reached, air time */
+  hud?: { label: string; value: number; warn?: number; text?: string }
+  /** live values a custom station shows through the pose (swing angle, height...) */
+  custom?: { a: number; b: number }
   /** custom stations run themselves; returns reps gained this frame */
   stepCustom?: (dt: number, taps: number, held: boolean) => number
 }
@@ -201,6 +209,21 @@ export function stopWorkout() {
   return earned
 }
 
+/**
+ * Leave at once, and somewhere else: a cannonball ends in the pool, not back
+ * on the board, so there is no stepping-off blend to play.
+ */
+export function dropOut(x: number, y: number, z: number) {
+  const st = workout.station
+  if (!st || workout.leaving) return
+  workout.total += workout.points
+  workout.from = { x, y, z, yaw: st.yaw }
+  workout.leaving = true
+  workout.enter = 0
+  workout.credits = 0
+  notify()
+}
+
 function finish() {
   const st = workout.station!
   const done: Finished = {
@@ -328,7 +351,7 @@ export function stepWorkout(dt: number) {
       const before = workout.action
       workout.action += dt / T
       if (before < R && workout.action >= R) st.onRelease?.(workout.power)
-      if (workout.action >= 1) workout.action = -1
+      if (workout.action >= 1) { workout.action = -1; st.onActionEnd?.() }
       return false
     }
     if (workout.charging) {

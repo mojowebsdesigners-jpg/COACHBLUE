@@ -9,7 +9,7 @@ import { app, pillars, process } from '../../data/programs'
 import { coach } from '../../data/coach'
 import { transformations } from '../../data/transformations'
 import {
-  GYM, GYM_SLAB_W, GYM_SLAB_D, PATH_HALF_WIDTH, addBoxFor, addCollider, addGrassClear, addPlatform, groundHeight,
+  GYM, GYM_SLAB_W, GYM_SLAB_D, PATH_HALF_WIDTH, addBoxFor, addCollider, addGrassClear, addPlatform, baseGround, groundHeight,
   pathCurve, pathDistance,
 } from '../../lib/terrain'
 import { player, useStore } from '../../state/store'
@@ -21,6 +21,8 @@ import {
 import { Athlete } from './Athlete'
 import { CampNPCs } from './NPCSystem'
 import { Gym, HeldDumbbell, HeldKettlebell } from './Gym'
+import { FunPark } from './fun/FunPark'
+import { StuntYard } from './fun/Stunts'
 import { BootCamp, HillSprint } from './BootCamp'
 import { Smoke } from './Weather'
 import { Summit } from './Summit'
@@ -364,7 +366,9 @@ function PodiumSteps({ x, z, y }: { x: number; z: number; y: number }) {
 export function HundredDays() {
   const l = locationById.hundred
   const [x, z] = useMemo(() => podiumSpot(l.pos[0], l.pos[1]), [l.pos])
-  const y = at(x, z)
+  // the ground under the podium, not the podium's own top (or every re-render
+  // would stack the steps higher)
+  const y = baseGround(x, z)
   const ref = useRef<InstancedMesh>(null)
   const lit = useRef<number>(0)
   const R = 17
@@ -792,6 +796,8 @@ export function Locations() {
       <Near pos={locationById.bootcamp.pos} dist={80}>{on('bootcamp') && <BootCamp />}</Near>
       <Near pos={locationById.camp.pos} dist={110}>{on('hill') && <HillSprint />}</Near>
       <Near pos={locationById.summit.pos} dist={95}><Summit /></Near>
+      <Near pos={locationById.funpark.pos} dist={85}>{on('funpark') && <FunPark />}</Near>
+      <Near pos={locationById.stunts.pos} dist={90}>{on('stunts') && <StuntYard />}</Near>
     </group>
   )
 }

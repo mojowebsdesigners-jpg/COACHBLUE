@@ -57,6 +57,7 @@ export function WorkoutHud() {
 
   const st = workout.station
   if (!st) return null
+  if (st.def.mode && st.def.mode !== 'reps') return <FunHud shown={shown} flash={flash} />
   if (st.def.category === 'rest') {
     return (
       <div className="workout workout--rest" role="status">
@@ -116,6 +117,78 @@ export function WorkoutHud() {
       </div>
       <button className="workout__stop" onClick={() => stopWorkout()}>
         <kbd>Esc</kbd> Finish set
+      </button>
+    </div>
+  )
+}
+
+/**
+ * The fun park's card: what to press, the power meter (drawn every frame, so
+ * the needle swings smoothly), a live gauge where the game has one, and the
+ * result of the last go in big letters.
+ */
+function FunHud({ shown, flash }: { shown: number; flash: { id: number; gained: number } | null }) {
+  const st = workout.station!
+  const mode = st.def.mode
+  const fill = useRef<HTMLElement>(null)
+  const gauge = useRef<HTMLElement>(null)
+  const gaugeText = useRef<HTMLElement>(null)
+  useEffect(() => {
+    let id = 0
+    const loop = () => {
+      const s = workout.station
+      if (fill.current) {
+        const v = workout.charging ? workout.charge : workout.action >= 0 ? workout.power : 0
+        fill.current.style.width = `${v * 100}%`
+        const sw = s?.sweet
+        fill.current.classList.toggle('is-sweet', !!sw && v >= sw[0] && v <= sw[1])
+      }
+      if (gauge.current && s?.hud) {
+        gauge.current.style.width = `${Math.min(1, s.hud.value) * 100}%`
+        gauge.current.classList.toggle('is-warn', s.hud.warn !== undefined && s.hud.value > s.hud.warn)
+        if (gaugeText.current) gaugeText.current.textContent = s.hud.text ?? s.hud.label
+      }
+      id = requestAnimationFrame(loop)
+    }
+    id = requestAnimationFrame(loop)
+    return () => cancelAnimationFrame(id)
+  }, [])
+  const fresh = workout.result && performance.now() - workout.resultStamp < 2600
+  const sweet = st.sweet
+  const how = st.def.how ?? (mode === 'hold' ? 'Hold Space to keep it going' : mode === 'steps' ? 'Space for the next move' : 'Space to play')
+  return (
+    <div className="workout workout--fun" role="status" aria-live="polite">
+      <div className="workout__name">{st.def.name}</div>
+      <p className="workout__how">{how.split(/(\bSpace\b|\bA \/ D\b|\bW\b|\bE\b)/).map((part, i) =>
+        ['Space', 'A / D', 'W', 'E'].includes(part) ? <kbd key={i}>{part}</kbd> : part)}</p>
+      {mode === 'power' && (
+        <div className="workout__power">
+          {sweet && <b style={{ left: `${sweet[0] * 100}%`, width: `${(sweet[1] - sweet[0]) * 100}%` }} />}
+          <i ref={fill} />
+        </div>
+      )}
+      {st.hud && (
+        <div className="workout__gauge">
+          <span ref={gaugeText}>{st.hud.label}</span>
+          <div><i ref={gauge} /></div>
+        </div>
+      )}
+      {fresh && <div className="workout__result" key={workout.resultStamp}>{workout.result}</div>}
+      <div className="workout__grid">
+        <div>
+          <span>{mode === 'hold' || mode === 'free' ? 'Time' : 'Goes'}</span>
+          <b>{mode === 'hold' || mode === 'free' ? `${Math.floor(workout.distance)}s` : String(workout.reps).padStart(2, '0')}</b>
+        </div>
+        <div className="workout__points">
+          <span>Points</span>
+          <b>
+            {shown}
+            {flash && <em key={flash.id}>+{flash.gained}</em>}
+          </b>
+        </div>
+      </div>
+      <button className="workout__stop" onClick={() => stopWorkout()}>
+        <kbd>Esc</kbd> Done
       </button>
     </div>
   )

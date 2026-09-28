@@ -15,6 +15,8 @@ export type LocationId =
   | 'faq'
   | 'goals'
   | 'bootcamp'
+  | 'funpark'
+  | 'stunts'
 
 export type Location = {
   id: LocationId
@@ -41,6 +43,8 @@ export const locations: Location[] = [
   { id: 'faq',        name: 'The Question Cave',       word: 'ASK',         pos: [62, 34],    pad: 14, discoverRadius: 20, onPath: false },
   { id: 'goals',      name: 'Your Goals',              word: 'GOALS',       pos: [40, 104],   pad: 15, discoverRadius: 22, onPath: false },
   { id: 'bootcamp',   name: 'Boot Camp',               word: 'GRIT',        pos: [-54, 100],  pad: 15, discoverRadius: 22, onPath: false },
+  { id: 'funpark',    name: 'The Fun Park',            word: 'PLAY',        pos: [-54, 6],    pad: 22, discoverRadius: 30, onPath: false },
+  { id: 'stunts',     name: 'The Stunt Yard',          word: 'SEND IT',     pos: [-16, -26],  pad: 22, discoverRadius: 30, onPath: false },
 ]
 
 export const locationById = Object.fromEntries(locations.map((l) => [l.id, l])) as Record<LocationId, Location>

@@ -286,3 +286,17 @@ frame rate drops.
 | Water | `3d/LakeScene.tsx`, `3d/Underwater.tsx`, `tools/sealife/build.py`, `systems/PlayerController.ts` | Lake 8 m deep; C dive / Space up, breath meter; underwater fog, light absorption, muffled sound, caustics, kelp, coral. Surface shaded by depth (turquoise shallows, deep blue middle, shore foam), sand beach, jetty, reeds, lily pads. Fish, turtle, ray and jellyfish are modelled in Blender: `blender -b --factory-startup -P tools/sealife/build.py -- raw/sealife.glb`, then optimise with `--prune-attributes false`. |
 | Outfits | `tools/coach/export_game.py outfits=1`, `3d/Player.tsx` | Skin under the shirt is exported with a `_SHIRT` attribute and discarded while the shirt is on; the shirt is recoloured Coach Blue blue in the shader. K / 👕 / gym lockers switch. Optimise the coach GLB with `--prune-attributes false`. |
 | Night | `systems/DevCheats.ts`, `lib/audio.ts` | Developer command (not in the UI): press the backquote key, type the word, Enter. Crickets and owls at night. |
+
+## Play: the Fun Park, Stunt Yard and water games (Sep 2026)
+
+| Area | Where | Notes |
+|---|---|---|
+| Fun Park | `3d/fun/FunPark.tsx` (+ `Workouts.tsx`, `Leisure.tsx`, `Sports.tsx`, `common.tsx`) | Location `funpark`. Heavy bag, skipping, jacks, burpees, sit-ups, plank, box jumps, battle ropes, tyre flip, sledgehammer, high striker, keepy-uppy, swings, trampoline, dance floor, hula hoop, yoga + meditation, free throws, penalties (A/D aim), mini golf, darts, photo wall. |
+| Play modes | `systems/Workout.ts`, `data/exercises.ts` (`mode`) | `reps` (gym), `hold`, `free`, `steps`, `power` (Space starts a swinging meter, Space releases; `sweet` band drawn green; `onRelease` / `onActionEnd`), `custom` (the station steps itself: swing, trampoline, fishing). `dropOut()` leaves a station somewhere else (the cannonball ends in the pool). `showResult()` for the card. |
+| HUD | `ui/WorkoutHud.tsx` (`FunHud`) | Meter drawn per frame, live gauge (`station.hud`: line tension), big result pop. |
+| Physics | `systems/Physics.ts` | Balls and boxes: gravity, any ground (terrain, platforms), colliders, the car as a pusher, walking dribbles a ball (not while on a station). Bodies sleep when still. |
+| Water games | `3d/fun/WaterFun.tsx` | Fishing off the jetty (cast → wait → strike → reel against line tension; weighed catch), stone skimming from the bank (skips, rings on the water), cannonball off a springboard at the pool's deep end (splash score). `splashAt()` for any splash. The jetty is now walkable (a platform). |
+| Stunt Yard | `3d/fun/Stunts.tsx` | Location `stunts`, a levelled lot: kicker ramp (distance and air time, best kept), donut ring (handbrake spins counted), car bowling (ten pins, strike detection, reset), crate wall. |
+| Car in the air | `systems/VehicleController.ts` | Launches when the ground falls away faster than gravity (ramp lips); ballistic flight, nose follows the arc, landing compresses the springs; `onCarLanding()`. The kerb check tests for a sudden step at the bumper, so ramps are driven up and their sides still block. Teleports carry no vertical speed. |
+| Platforms | `lib/terrain.ts` | Boxes may now be ramps (`rise`). Place anything raised with `baseGround()`, never `groundHeight()` (which includes the platform itself). |
+| Map | `systems/MapPlaces.ts`, `systems/MapPoints.ts`, `ui/MiniMap.tsx` | Every activity has a map icon; grouped ones (`group`) show once zoomed in past `GROUP_ZOOM`. |

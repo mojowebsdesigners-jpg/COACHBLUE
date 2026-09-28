@@ -30,6 +30,10 @@ import { Frozen } from './Frozen'
 import { Benches } from './Seats'
 import { Pickups } from './Pickups'
 import { NameLetters } from './NameLetters'
+import { PhysicsWorld } from './fun/common'
+import { Cannonball, Fishing, SplashFX, StoneSkim } from './fun/WaterFun'
+import { Near } from './Props'
+import { LAKE, POOL } from '../../lib/terrain'
 import { Townsfolk } from './Townsfolk'
 import { Lighting } from './Lighting'
 import { LightPool } from './LightPool'
@@ -294,6 +298,14 @@ export function World() {
       )}
       {!lite && on('pickups') && <Pickups />}
       {!lite && on('letters') && <NameLetters />}
+      {!lite && on('fun') && (
+        <>
+          <PhysicsWorld />
+          <SplashFX />
+          <Near pos={[LAKE.x, LAKE.z]} dist={75}><Fishing /><StoneSkim /></Near>
+          <Near pos={[POOL.x, POOL.z]} dist={60}><Cannonball /></Near>
+        </>
+      )}
       {!lite && on('people') && <Townsfolk />}
       {!lite && on('vehicle') && <Vehicle />}
       {!lite && on('vehicle') && on('tracks') && <TireTracks />}
