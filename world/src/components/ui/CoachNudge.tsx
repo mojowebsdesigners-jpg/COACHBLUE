@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { useStore } from '../../state/store'
+import { openLink } from '../../data/links'
 
 /**
  * "Want Coach Blue to help you with this?" — offered after something the
@@ -18,13 +19,20 @@ export function CoachNudge() {
     return () => clearTimeout(t)
   }, [nudge, setNudge])
 
+  // his site in a new tab, or his sign-up form with the goal already chosen
+  const act = () => {
+    if (!nudge) return
+    if (nudge.href) { openLink(nudge.href); setNudge(null) }
+    else openBooking({ goal: nudge.goal, reason: nudge.title })
+  }
   useEffect(() => {
     if (!nudge) return
     const onKey = (e: KeyboardEvent) => {
-      if (e.code === 'KeyB') openBooking({ goal: nudge.goal, reason: nudge.title })
+      if (e.code === 'KeyB') act()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nudge, openBooking])
 
   if (!nudge || busy) return null
@@ -35,8 +43,8 @@ export function CoachNudge() {
         <span className="nudge__eyebrow">{nudge.title}</span>
         <p>{nudge.body}</p>
         <div className="nudge__actions">
-          <button className="btn primary" onClick={() => openBooking({ goal: nudge.goal, reason: nudge.title })}>
-            <kbd>B</kbd> Get my plan
+          <button className="btn primary" onClick={act}>
+            <kbd>B</kbd> {nudge.cta ?? 'Get my plan'}
           </button>
           <button className="btn ghost" onClick={() => setNudge(null)}>Not now</button>
         </div>

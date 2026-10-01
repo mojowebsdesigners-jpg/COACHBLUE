@@ -52,7 +52,8 @@ export function ClassicSite() {
                 </span>
               ))}
             </p>
-            <a className="btn primary" href={LINKS.inquiry} target="_blank" rel="noreferrer">Sign up here</a>
+            <a className="btn primary" href={LINKS.inquiry} target="_blank" rel="noreferrer">Sign up here</a>{' '}
+            <a className="btn" href={LINKS.hybrid} target="_blank" rel="noreferrer">Free Hybrid Athlete training</a>
           </div>
           <img src={coach.portrait} alt="Coach Blue" />
         </section>

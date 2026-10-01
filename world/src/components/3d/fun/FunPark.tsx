@@ -3,6 +3,8 @@ import { useFrame } from '@react-three/fiber'
 import { Text } from '@react-three/drei'
 import { Vector3 } from 'three'
 import { registerLamp } from '../LightPool'
+import { registerInteractable } from '../InteractionSystem'
+import { LINKS, openLink } from '../../../data/links'
 import { DISPLAY_FONT } from '../Props'
 import { showResult } from '../../../systems/Workout'
 import { HeavyBag, SkipRope, FloorWork, PlyoBox, BattleRopes, TyreFlip, HammerTyre, HighStriker, KeepyUppy } from './Workouts'
@@ -67,7 +69,25 @@ function PhotoSpot({ m }: { m: ParkMats }) {
 function ParkGate({ m }: { m: ParkMats }) {
   const LX = 0, LZ = 21
   const [x, z] = pw(LX, LZ)
+  // a board by the gate for Coach Blue's own site: everything in the park is
+  // what his Hybrid Athlete System trains
+  const [bx, bz] = pw(LX + 5.4, LZ + 0.6)
+  const by = ph(LX + 5.4, LZ + 0.6)
+  useEffect(() => registerInteractable({
+    id: 'hybrid-board', label: 'FREE HYBRID ATHLETE TRAINING · COACHBLUE.FIT', verb: 'OPEN',
+    position: new Vector3(bx, by + 1.4, bz), radius: 3.2, panel: null,
+    action: () => openLink(LINKS.hybrid),
+  }), [bx, by, bz])
   return (
+    <>
+    <group position={[bx, by, bz]} rotation={[0, -0.35, 0]}>
+      {[-1.4, 1.4].map((px) => <mesh key={px} position={[px, 0.9, 0]} material={m.steel} castShadow><boxGeometry args={[0.08, 1.8, 0.08]} /></mesh>)}
+      <mesh position={[0, 1.75, 0]} castShadow><boxGeometry args={[3.1, 1.5, 0.08]} /><meshStandardMaterial color="#0f2f5c" roughness={0.6} /></mesh>
+      <Text font={DISPLAY_FONT} fontSize={0.17} position={[0, 2.25, 0.05]} color="#1de9b6" anchorX="center" anchorY="middle" letterSpacing={0.08}>THE HYBRID ATHLETE SYSTEM</Text>
+      <Text font={DISPLAY_FONT} fontSize={0.3} position={[0, 1.85, 0.05]} color="#ffffff" anchorX="center" anchorY="middle" maxWidth={2.2} textAlign="center">FREE TRAINING</Text>
+      <Text font={DISPLAY_FONT} fontSize={0.15} position={[0, 1.5, 0.05]} color="#cfe0f5" anchorX="center" anchorY="middle" maxWidth={2.2} textAlign="center">Strength · mobility · conditioning in under 5 hours a week</Text>
+      <Text font={DISPLAY_FONT} fontSize={0.2} position={[0, 1.18, 0.05]} color="#f2c14e" anchorX="center" anchorY="middle">COACHBLUE.FIT  ·  PRESS E</Text>
+    </group>
     <group position={[x, ph(LX, LZ), z]}>
       {[-3.2, 3.2].map((px) => (
         <mesh key={px} position={[px, 2, 0]} material={m.blue} castShadow><boxGeometry args={[0.35, 4, 0.35]} /></mesh>
@@ -79,6 +99,7 @@ function ParkGate({ m }: { m: ParkMats }) {
         </Text>
       ))}
     </group>
+    </>
   )
 }
 

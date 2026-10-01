@@ -9,6 +9,7 @@ import {
 } from 'three'
 import { transformations } from '../../data/transformations'
 import { coach } from '../../data/coach'
+import { LINKS, openLink } from '../../data/links'
 import { app, hundredDays, pillars } from '../../data/programs'
 import { locations } from '../../data/journey'
 import { scanned } from '../../lib/materials'
@@ -130,7 +131,7 @@ type BoardContent =
   | { kind: 'video'; src: string; caption: string }
   | { kind: 'photo'; src: string; caption: string; index: number; aspect: number }
   | { kind: 'image'; src: string; caption: string; aspect: number }
-  | { kind: 'text'; title: string; caption: string }
+  | { kind: 'text'; title: string; caption: string; href?: string }
 
 /** A roadside billboard: steel frame, posts, a lit face, and its own lamps. */
 function Billboard({
@@ -170,6 +171,18 @@ function Billboard({
 
   useEffect(() => {
     addCollider({ x: at.x, z: at.z, r: 1 })
+    if (content.kind === 'text' && content.href) {
+      const href = content.href
+      return registerInteractable({
+        id: `board-link-${Math.round(at.x)}-${Math.round(at.z)}`,
+        label: 'GET THE FREE TRAINING · COACHBLUE.FIT',
+        verb: 'OPEN',
+        position: new Vector3(at.x, at.y + 3, at.z),
+        radius: 7,
+        panel: null,
+        action: () => openLink(href),
+      })
+    }
     if (content.kind !== 'photo') return
     return registerInteractable({
       id: `board-${content.index}-${Math.round(at.x)}-${Math.round(at.z)}`,
@@ -274,8 +287,12 @@ const pillarBoards: BoardContent[] = pillars.map((p) => ({
  * whole road rather than a handful at its far ends. Every word is his own copy
  * (src/data), and every transformation photo opens the full-screen viewer.
  */
+const HYBRID: BoardContent = {
+  kind: 'text', title: 'THE HYBRID ATHLETE SYSTEM', caption: 'Free training · coachblue.fit', href: LINKS.hybrid,
+}
 const CAMPAIGN: BoardContent[] = [
   { kind: 'text', title: 'REAL STRENGTH IS FUNCTIONAL', caption: 'Coach Blue — online coaching' },
+  HYBRID,
   { kind: 'image', src: coach.photos.training, caption: 'TRAIN WITH COACH BLUE', aspect: 1.5 },
   { kind: 'photo', src: transformations[0].src, caption: 'CLIENT TRANSFORMATION', index: 0, aspect: 1 },
   { kind: 'text', title: hundredDays.title.toUpperCase(), caption: hundredDays.headline },
@@ -289,6 +306,7 @@ const CAMPAIGN: BoardContent[] = [
   { kind: 'image', src: coach.photos.running, caption: 'COACH BLUE', aspect: 1.5 },
   { kind: 'photo', src: transformations[3].src, caption: 'CLIENT TRANSFORMATION', index: 3, aspect: 1600 / 951 },
   pillarBoards[1],
+  { kind: 'text', title: 'FEEL 10-20 YEARS YOUNGER', caption: 'In 90-180 days · free training at coachblue.fit', href: LINKS.hybrid },
   { kind: 'text', title: app.title.toUpperCase(), caption: app.features.join(' · ') },
   { kind: 'photo', src: transformations[4].src, caption: 'CLIENT TRANSFORMATION', index: 4, aspect: 1 },
   { kind: 'text', title: hundredDays.features[1].title.toUpperCase(), caption: hundredDays.features[1].body },

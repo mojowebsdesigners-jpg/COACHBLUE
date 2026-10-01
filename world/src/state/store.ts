@@ -134,8 +134,9 @@ type State = {
   setDialog: (d: { name: string; lines: { who: 'them' | 'you'; text: string }[] } | null) => void
   advanceDialog: () => void
   /** the gentle "want Coach Blue's help with this?" card */
-  nudge: { title: string; body: string; goal?: string; reason?: string; key: number } | null
-  setNudge: (n: { title: string; body: string; goal?: string; reason?: string } | null) => void
+  /** an offer of Coach Blue's help; with `href` it opens his site instead of the form */
+  nudge: { title: string; body: string; goal?: string; reason?: string; href?: string; cta?: string; key: number } | null
+  setNudge: (n: { title: string; body: string; goal?: string; reason?: string; href?: string; cta?: string } | null) => void
   setPhotoMode: (o: boolean) => void
   setNearest: (i: Interactable | null) => void
   discover: (id: LocationId, name: string) => void
