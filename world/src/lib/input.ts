@@ -41,10 +41,16 @@ function refresh() {
   input.strafe = s
   input.run = held.has('ShiftLeft') || held.has('ShiftRight')
   input.actionHeld = held.has('Space') || touchAction
-  input.diveHeld = held.has('KeyC') || held.has('ControlLeft') || held.has('ControlRight')
+  input.diveHeld = held.has('KeyC') || held.has('ControlLeft') || held.has('ControlRight') || touchDive
 }
 
 let touchAction = false
+let touchDive = false
+/** The touch layout's dive button, shown while swimming. */
+export function setTouchDive(down: boolean) {
+  touchDive = down
+  refresh()
+}
 /** The touch layout's action button: a press is a tap, holding it is held. */
 export function setTouchAction(down: boolean) {
   if (down && !touchAction) {
@@ -110,6 +116,8 @@ export function attachInput(el: HTMLElement, handlers: KeyHandlers) {
   }
 
   let dragging = false
+
+  let dragId = -1
   let lastX = 0
   let lastY = 0
 
@@ -135,7 +143,10 @@ export function attachInput(el: HTMLElement, handlers: KeyHandlers) {
       el.requestPointerLock?.()
       return
     }
+    // one finger turns the camera; others (on the stick, the buttons) never do
+    if (dragging) return
     dragging = true
+    dragId = e.pointerId
     lastX = e.clientX
     lastY = e.clientY
     el.setPointerCapture?.(e.pointerId)
@@ -149,13 +160,16 @@ export function attachInput(el: HTMLElement, handlers: KeyHandlers) {
       input.lookDY += e.movementY * LOOK_SENS_Y
       return
     }
-    if (!dragging) return
-    input.lookDX += (e.clientX - lastX) * LOOK_SENS_X
-    input.lookDY += (e.clientY - lastY) * LOOK_SENS_Y
+    if (!dragging || e.pointerId !== dragId) return
+    // a finger on glass moves further than a mouse for the same intent
+    const k = e.pointerType === 'touch' ? 1.6 : 1
+    input.lookDX += (e.clientX - lastX) * LOOK_SENS_X * k
+    input.lookDY += (e.clientY - lastY) * LOOK_SENS_Y * k
     lastX = e.clientX
     lastY = e.clientY
   }
   const onPointerUp = (e: PointerEvent) => {
+    if (e.pointerId !== dragId) return
     dragging = false
     el.releasePointerCapture?.(e.pointerId)
   }

@@ -2,7 +2,7 @@ import { RadioCard, useRadio } from './RadioCard'
 import { toggle as toggleRadio } from '../../lib/radio'
 import { useEffect, useState } from 'react'
 import { journeySteps } from '../../data/journey'
-import { isTouchDevice, setTouchAction } from '../../lib/input'
+import { isTouchDevice, setTouchAction, setTouchDive } from '../../lib/input'
 import { player, useStore } from '../../state/store'
 import { triggerNearest } from '../3d/InteractionSystem'
 import { WorldClock } from './WorldClock'
@@ -205,6 +205,14 @@ export function TouchControls({ onStick }: { onStick: (x: number, y: number) => 
   useEffect(() => {
     setTouch(isTouchDevice())
   }, [])
+  // the dive button only while he is in the water (polled: swimming lives
+  // outside React)
+  const [swimming, setSwimming] = useState(false)
+  useEffect(() => {
+    if (!touch) return
+    const id = setInterval(() => setSwimming(player.swimming), 300)
+    return () => clearInterval(id)
+  }, [touch])
 
   if (phase !== 'world' || !touch || photoMode) return null
 
@@ -244,6 +252,15 @@ export function TouchControls({ onStick }: { onStick: (x: number, y: number) => 
         onPointerUp={() => setTouchAction(false)}
         onPointerCancel={() => setTouchAction(false)}
       >▲</button>
+      {swimming && (
+        <button
+          className="touch-dive"
+          aria-label="Dive"
+          onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); setTouchDive(true) }}
+          onPointerUp={() => setTouchDive(false)}
+          onPointerCancel={() => setTouchDive(false)}
+        >⬇</button>
+      )}
     </>
   )
 }

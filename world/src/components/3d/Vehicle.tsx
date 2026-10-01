@@ -190,7 +190,7 @@ export function Vehicle() {
       )
       light.target.updateMatrixWorld()
     }
-  })
+  }, -2)   // moves the car before the camera follows it
 
   return (
     <group userData={{ noCollide: true }}>

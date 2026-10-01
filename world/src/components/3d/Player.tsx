@@ -342,7 +342,7 @@ export function Player() {
     animator.update(dt, move, reduced)
 
     steps.update(dt, move, soundOn)
-  })
+  }, -2)   // moves him before the camera follows (the camera runs at 0)
 
   // procedural layer — after the mixer, so it adds to the clip
   useFrame((_, delta) => {

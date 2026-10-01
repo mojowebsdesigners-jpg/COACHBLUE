@@ -504,7 +504,7 @@ function landHeight(x: number, z: number): number {
   return h
 }
 
-function terrainHeightExact(x: number, z: number): number {
+function terrainHeightExact(x: number, z: number, underBridge = true): number {
   let h = landHeight(x, z)
 
   // the stream's channel, cut to its water level: a bed over your head in
@@ -517,7 +517,20 @@ function terrainHeightExact(x: number, z: number): number {
     const chan = sd < 2.2
       ? w - 0.35 - 1.35 * (1 - smoothstep(0.6, 2.2, sd))
       : w - 0.2 + (sd - 2.2) * 1.1
-    h += (chan - h) * (1 - smoothstep(4, 10, sd))
+    // cut freely (a gully through rising land), but only raise the ground
+    // right at the water's edge, enough to hold the water in: a bank raised
+    // further out stood above the road beside the bridge
+    if (chan < h) h += (chan - h) * (1 - smoothstep(4, 10, sd))
+    else h += (chan - h) * (1 - smoothstep(2.6, 4.5, sd))
+  }
+
+  // under the road bridge the ground always clears the deck: the deck is a
+  // straight ramp between its ends, and land humping above that line came up
+  // through the tarmac
+  const bl = bridgeLocal(x, z)
+  if (underBridge && Math.abs(bl.lz) < bridge.length / 2 && Math.abs(bl.lx) < bridge.width / 2 + 1.5) {
+    const k = Math.min(1, Math.max(0, (bridge.length / 2 - Math.abs(bl.lz)) / 1.5))
+    h = Math.min(h, bridgeDeckAt(x, z) - 0.6 * k - 0.15)
   }
 
   // the lake basin: bring the ground to the lake's level round the shore,
@@ -641,8 +654,11 @@ export function bridgeEnds() {
     const e = bridge.length / 2 + 0.5
     const sx = Math.sin(bridge.angle), sz = Math.cos(bridge.angle)
     _ends = {
-      front: terrainHeight(bridge.x + sx * e, bridge.z + sz * e),
-      back: terrainHeight(bridge.x - sx * e, bridge.z - sz * e),
+      // the ground itself at each end (not the grid, whose cells reach under
+      // the deck, which is cut to clear the deck: that would ask for the
+      // ends again)
+      front: terrainHeightExact(bridge.x + sx * e, bridge.z + sz * e, false),
+      back: terrainHeightExact(bridge.x - sx * e, bridge.z - sz * e, false),
     }
   }
   return _ends

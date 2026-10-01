@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { isTouchDevice } from '../../lib/input'
 
 /**
  * A one-line nudge that the view is yours to turn. It shows until the pointer
@@ -19,7 +20,8 @@ export function MouseLookHint() {
     return () => document.removeEventListener('pointerlockchange', onChange)
   }, [])
 
-  if (locked || used) return null
+  // a phone looks around by dragging; there is no pointer to capture
+  if (locked || used || isTouchDevice()) return null
   return (
     <div className="look-hint" aria-hidden>
       Click to look around · <kbd>Esc</kbd> to release

@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useStore } from '../../state/store'
+import { isTouchDevice } from '../../lib/input'
+import { onWorkoutChange, workout } from '../../systems/Workout'
 
 /**
  * The controls, shown once on first arrival and then on demand.
@@ -19,6 +21,15 @@ const ROWS: [string, string][] = [
   ['Esc', 'Close anything, or finish a set'],
 ]
 
+const TOUCH_ROWS: [string, string][] = [
+  ['Left stick', 'Move — push it all the way to sprint'],
+  ['Drag the screen', 'Look around'],
+  ['▲', 'Jump · in an activity, tap for a rep (hold to keep going)'],
+  ['E', 'Interact — talk, enter the car, start an activity'],
+  ['⬇', 'Dive, when you are swimming'],
+  ['Top bar', 'Map · car · photo · settings (swipe it sideways)'],
+]
+
 export function ControlsCard() {
   const phase = useStore((s) => s.phase)
   const [open, setOpen] = useState(false)
@@ -32,6 +43,9 @@ export function ControlsCard() {
     const t = setTimeout(() => setOpen(false), 9000)
     return () => clearTimeout(t)
   }, [phase, seen])
+
+  // an activity's own card needs the space more
+  useEffect(() => onWorkoutChange(() => { if (workout.station) setOpen(false) }), [])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -53,14 +67,14 @@ export function ControlsCard() {
         <button onClick={() => setOpen(false)} aria-label="Close">×</button>
       </div>
       <dl>
-        {ROWS.map(([key, what]) => (
+        {(isTouchDevice() ? TOUCH_ROWS : ROWS).map(([key, what]) => (
           <div key={key}>
             <dt>{key}</dt>
             <dd>{what}</dd>
           </div>
         ))}
       </dl>
-      <p className="controls-card__foot">Press <kbd>/</kbd> to show this again</p>
+      {!isTouchDevice() && <p className="controls-card__foot">Press <kbd>/</kbd> to show this again</p>}
     </div>
   )
 }

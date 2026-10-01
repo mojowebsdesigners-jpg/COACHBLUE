@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { lastRep, onWorkoutChange, stopWorkout, workout } from '../../systems/Workout'
+import { isTouchDevice } from '../../lib/input'
 
 /**
  * The set read-out. It exists only while a set is running: no score follows
@@ -55,6 +56,7 @@ export function WorkoutHud() {
     return () => clearInterval(id)
   })
 
+  const touch = isTouchDevice()
   const st = workout.station
   if (!st) return null
   if (st.def.mode && st.def.mode !== 'reps') return <FunHud shown={shown} flash={flash} />
@@ -89,14 +91,14 @@ export function WorkoutHud() {
         {tread
           ? <><kbd>W</kbd> faster · <kbd>S</kbd> slower</>
           : st.def.pose === 'push'
-            ? <>Hold <kbd>W</kbd> (or <kbd>Space</kbd>) to drive it · let go to rest</>
+            ? <>Hold <kbd>W</kbd> (or <kbd>{touch ? '▲' : 'Space'}</kbd>) to drive it · let go to rest</>
             : st.def.pose === 'crawl' || st.def.pose === 'tyres'
               ? <>Hold <kbd>W</kbd> to go · let go to stop · <kbd>E</kbd> get up</>
             : st.def.pose === 'wall'
-              ? <><kbd>Space</kbd> for each move: jump, pull up, over, down</>
+              ? <><kbd>{touch ? '▲' : 'Space'}</kbd> for each move: jump, pull up, over, down</>
             : st.def.pose === 'climb'
-              ? <><kbd>Space</kbd> one pull, hand over hand · ring the bell · <kbd>E</kbd> slide down</>
-              : <><kbd>Space</kbd> one rep · hold to keep going · tap as the rep lands for a bonus</>}
+              ? <><kbd>{touch ? '▲' : 'Space'}</kbd> one pull, hand over hand · ring the bell · <kbd>E</kbd> slide down</>
+              : <><kbd>{touch ? '▲' : 'Space'}</kbd> one rep · hold to keep going · tap as the rep lands for a bonus</>}
       </p>
       <div className="workout__grid">
         <div>
@@ -116,7 +118,7 @@ export function WorkoutHud() {
         </div>
       </div>
       <button className="workout__stop" onClick={() => stopWorkout()}>
-        <kbd>Esc</kbd> Finish set
+        {!touch && <kbd>Esc</kbd>} Finish set
       </button>
     </div>
   )
@@ -127,8 +129,11 @@ export function WorkoutHud() {
  * the needle swings smoothly), a live gauge where the game has one, and the
  * result of the last go in big letters.
  */
+const TOUCH_KEY: Record<string, string> = { Space: '▲', 'A / D': 'stick ◀ ▶', W: 'stick ▲', E: 'E' }
+
 function FunHud({ shown, flash }: { shown: number; flash: { id: number; gained: number } | null }) {
   const st = workout.station!
+  const touch = isTouchDevice()
   const mode = st.def.mode
   const fill = useRef<HTMLElement>(null)
   const gauge = useRef<HTMLElement>(null)
@@ -160,7 +165,7 @@ function FunHud({ shown, flash }: { shown: number; flash: { id: number; gained: 
     <div className="workout workout--fun" role="status" aria-live="polite">
       <div className="workout__name">{st.def.name}</div>
       <p className="workout__how">{how.split(/(\bSpace\b|\bA \/ D\b|\bW\b|\bE\b)/).map((part, i) =>
-        ['Space', 'A / D', 'W', 'E'].includes(part) ? <kbd key={i}>{part}</kbd> : part)}</p>
+        ['Space', 'A / D', 'W', 'E'].includes(part) ? <kbd key={i}>{touch ? TOUCH_KEY[part] : part}</kbd> : part)}</p>
       {mode === 'power' && (
         <div className="workout__power">
           {sweet && <b style={{ left: `${sweet[0] * 100}%`, width: `${(sweet[1] - sweet[0]) * 100}%` }} />}
@@ -188,7 +193,7 @@ function FunHud({ shown, flash }: { shown: number; flash: { id: number; gained: 
         </div>
       </div>
       <button className="workout__stop" onClick={() => stopWorkout()}>
-        <kbd>Esc</kbd> Done
+        {!isTouchDevice() && <kbd>Esc</kbd>} Done
       </button>
     </div>
   )

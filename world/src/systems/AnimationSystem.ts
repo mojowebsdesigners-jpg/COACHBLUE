@@ -44,6 +44,29 @@ function addRotation(bone: Object3D, axis: Vector3, angle: number) {
   bone.quaternion.premultiply(_pq.clone().invert().multiply(_q).multiply(_pq))
 }
 
+/**
+ * Where in a locomotion clip (0..1) the left thigh is furthest forward of
+ * the right: the moment the left leg swings through. Read off the clip's
+ * thigh tracks, so walk and run can be lined up stride for stride.
+ */
+function leftSwingPhase(action?: AnimationAction) {
+  const clip = action?.getClip()
+  if (!clip) return 0
+  const find = (side: string) => clip.tracks.find((t) => t.name.endsWith(`${side}UpLeg.quaternion`))
+  const l = find('Left'), r = find('Right')
+  if (!l || !r) return 0
+  const n = Math.min(l.times.length, r.times.length)
+  // forward swing of a thigh: rotation about its local x
+  const pitch = (v: ArrayLike<number>, i: number) => 2 * Math.atan2(v[i * 4], v[i * 4 + 3])
+  let best = -Infinity, at = 0
+  for (let i = 0; i < n; i++) {
+    const d = pitch(l.values, i) - pitch(r.values, i)
+    if (d > best) { best = d; at = l.times[i] }
+  }
+  // offset that puts that moment at stride 0
+  return (at / clip.duration) % 1
+}
+
 export class CharacterAnimator {
   private idleTimer = 0
   private glance = 0
@@ -58,10 +81,21 @@ export class CharacterAnimator {
   private restQ = new Map<Object3D, Quaternion>()
   /** the subset of those the clips actually write each frame */
   private driven = new Set<Object3D>()
+  /**
+   * One stride shared by the walk and the run. Each clip cycles at its own
+   * rate, so blended at a jog their legs were out of step, and the average of
+   * two out-of-step strides is a shuffle. Both are now driven from this one
+   * phase, each offset so its left leg swings through at the same moment.
+   */
+  private stride = 0
+  private walkOffset = 0
+  private runOffset = 0
 
   constructor(rig: Rig, bones: Bones) {
     this.rig = rig
     this.bones = bones
+    this.walkOffset = leftSwingPhase(rig.walk)
+    this.runOffset = leftSwingPhase(rig.run)
 
     // The procedural layer premultiplies onto bone.quaternion. That is only
     // safe for bones the mixer rewrites from the clip every frame — anything
@@ -108,28 +142,32 @@ export class CharacterAnimator {
     const speed = Math.abs(move.speed)
     const reversing = move.speed < -0.05
 
-    // walk fades in from a standstill, run takes over as speed climbs
-    const walkW = MathUtils.clamp(speed / 1.6, 0, 1)
-    const runW = MathUtils.clamp((speed - 2.2) / 2.6, 0, 1)
+    // walk fades in from a standstill; by a jog the run has taken over, so
+    // the everyday pace is one clean gait rather than half of each
+    const walkW = MathUtils.clamp(speed / 1.4, 0, 1)
+    const runW = MathUtils.clamp((speed - 1.9) / 1.1, 0, 1)
 
     // turning on the spot still shuffles the feet rather than pivoting rigidly
     const turnShuffle = speed < 0.3 ? Math.abs(move.turning) * 0.45 : 0
 
     if (idle) idle.weight = MathUtils.damp(idle.weight, Math.max(0, 1 - walkW - turnShuffle), 12, dt)
-    if (walk) {
-      walk.weight = MathUtils.damp(walk.weight, Math.max(walkW * (1 - runW), turnShuffle), 12, dt)
-      const rate = speed > 0.2 ? speed / WALK_NATIVE : 0.55
-      walk.timeScale = MathUtils.clamp(rate, 0.35, 2.2) * (reversing ? -1 : 1)
-    }
-    if (run) {
-      run.weight = MathUtils.damp(run.weight, walkW * runW, 12, dt)
-      run.timeScale = MathUtils.clamp(speed / RUN_NATIVE, 0.6, 1.9)
-    }
+    if (walk) walk.weight = MathUtils.damp(walk.weight, Math.max(walkW * (1 - runW), turnShuffle), 12, dt)
+    if (run) run.weight = MathUtils.damp(run.weight, walkW * runW, 12, dt)
+
+    // the stride: cycles per second as each clip would take them at this
+    // speed (rates matched to ground speed, so the planted foot does not
+    // slide), blended the way the clips are, then both clips set from it
+    const wDur = walk?.getClip().duration || 1, rDur = run?.getClip().duration || 1
+    const walkRate = MathUtils.clamp(speed > 0.2 ? speed / WALK_NATIVE : 0.55, 0.35, 2.2) / wDur
+    const runRate = MathUtils.clamp(speed / RUN_NATIVE, 0.6, 1.9) / rDur
+    let cps = walkRate + (runRate - walkRate) * runW
+    if (move.airborne) cps *= 0.1
+    this.stride = (this.stride + cps * dt * (reversing ? -1 : 1) + 1) % 1
+    if (walk) { walk.timeScale = 0; walk.time = ((this.stride + this.walkOffset) % 1) * wDur }
+    if (run) { run.timeScale = 0; run.time = ((this.stride + this.runOffset) % 1) * rDur }
 
     if (move.airborne) {
       this.airTime += dt
-      if (walk) walk.timeScale = 0.1
-      if (run) run.timeScale = 0.1
     } else {
       if (this.airTime > 0.25) this.landTime = 0.32
       this.airTime = 0

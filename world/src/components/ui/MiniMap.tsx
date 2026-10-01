@@ -6,6 +6,7 @@ import {
 import { player, useStore } from '../../state/store'
 import { vehicle } from '../../systems/VehicleController'
 import { travelTo } from '../../systems/FastTravel'
+import { isTouchDevice } from '../../lib/input'
 import { GROUP_ZOOM, MAP_ICON, mapPoints, onMapPoints, type MapPoint } from '../../systems/MapPoints'
 
 /**
@@ -123,6 +124,8 @@ export function MiniMap() {
   const drag = useRef<{ x: number; y: number; cx: number; cz: number; moved: boolean } | null>(null)
   const [hover, setHover] = useState<MapPoint | null>(null)
   const [cursor, setCursor] = useState<{ x: number; z: number } | null>(null)
+  const fingers = useRef(new Map<number, { x: number; y: number }>())
+  const pinch = useRef(0)
   const { points, discovered } = usePoints()
 
   // open centred on you
@@ -236,6 +239,17 @@ export function MiniMap() {
 
   if (!open) return null
 
+  /** zoom by a factor, keeping the map point under (sx, sy) where it is */
+  const zoomAbout = (sx: number, sy: number, f: number) => {
+    const v = view.current
+    const before = toWorld(sx, sy)
+    v.zoom = Math.min(6, Math.max(1, v.zoom * f))
+    const after = toWorld(sx, sy)
+    v.cx += before.x - after.x
+    v.cz += before.z - after.z
+    clampView()
+  }
+  const zoomBy = (f: number) => zoomAbout(size() / 2, size() / 2, f)
   const pick = (sx: number, sy: number) => {
     let best: MapPoint | null = null, bd = 18 * 18
     for (const p of points) {
@@ -261,30 +275,46 @@ export function MiniMap() {
       <div className="map-inner big" onClick={(e) => e.stopPropagation()} ref={box}>
         <div className="map-head">
           <span className="eyebrow">Coach Blue's valley</span>
-          <span className="map-help">Scroll to zoom · drag to move · click anywhere to go there</span>
-          <button className="btn" onClick={() => setMap(false)}>Close <kbd>M</kbd></button>
+          <span className="map-help">{isTouchDevice()
+            ? 'Pinch or + − to zoom · drag to move · tap to go'
+            : 'Scroll or + − to zoom · drag to move · click anywhere to go there'}</span>
+          <span className="map-zoom">
+            <button className="btn" aria-label="Zoom in" onClick={() => zoomBy(1.4)}>+</button>
+            <button className="btn" aria-label="Zoom out" onClick={() => zoomBy(1 / 1.4)}>−</button>
+          </span>
+          <button className="btn" onClick={() => setMap(false)}>Close{!isTouchDevice() && <kbd>M</kbd>}</button>
         </div>
         <div className="map-stage flat">
           <canvas
             ref={canvas}
             className="map-canvas big"
             onWheel={(e) => {
-              const v = view.current
               const { sx, sy } = local(e)
-              const before = toWorld(sx, sy)
-              v.zoom = Math.min(6, Math.max(1, v.zoom * (e.deltaY < 0 ? 1.18 : 1 / 1.18)))
-              // zoom about the pointer
-              const after = toWorld(sx, sy)
-              v.cx += before.x - after.x
-              v.cz += before.z - after.z
-              clampView()
+              zoomAbout(sx, sy, e.deltaY < 0 ? 1.18 : 1 / 1.18)
             }}
             onPointerDown={(e) => {
               e.currentTarget.setPointerCapture(e.pointerId)
+              fingers.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
+              if (fingers.current.size === 2) {
+                // two fingers: a pinch, not a drag (and never a tap)
+                const [a, b] = [...fingers.current.values()]
+                pinch.current = Math.hypot(a.x - b.x, a.y - b.y)
+                if (drag.current) drag.current.moved = true
+                return
+              }
               drag.current = { x: e.clientX, y: e.clientY, cx: view.current.cx, cz: view.current.cz, moved: false }
             }}
             onPointerMove={(e) => {
               const { sx, sy } = local(e)
+              if (fingers.current.has(e.pointerId)) fingers.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
+              if (fingers.current.size === 2 && pinch.current) {
+                const [a, b] = [...fingers.current.values()]
+                const d = Math.hypot(a.x - b.x, a.y - b.y)
+                const r = box.current?.querySelector('canvas')?.getBoundingClientRect()
+                if (r) zoomAbout((a.x + b.x) / 2 - r.left, (a.y + b.y) / 2 - r.top, d / pinch.current)
+                pinch.current = d
+                return
+              }
               const d = drag.current
               if (d) {
                 const dx = e.clientX - d.x, dy = e.clientY - d.y
@@ -301,6 +331,9 @@ export function MiniMap() {
             }}
             onPointerLeave={() => { setHover(null); setCursor(null) }}
             onPointerUp={(e) => {
+              fingers.current.delete(e.pointerId)
+              if (fingers.current.size < 2) pinch.current = 0
+              if (fingers.current.size === 1) { drag.current = null; return }
               const d = drag.current
               drag.current = null
               if (d?.moved) return
