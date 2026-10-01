@@ -1,5 +1,5 @@
 import { useGLTF } from '@react-three/drei'
-import type { Camera, Scene, WebGLRenderer } from 'three'
+import { Texture, type Camera, type Mesh, type Object3D, type Scene, type VideoTexture, type WebGLRenderer } from 'three'
 
 /**
  * Everything the world is built from, fetched before the world is shown.
@@ -39,9 +39,42 @@ export async function warmShaders(gl: WebGLRenderer, scene: Scene, camera: Camer
   const compile = (gl as WebGLRenderer & {
     compileAsync?: (s: Scene, c: Camera) => Promise<unknown>
   }).compileAsync
+  // compiling only sees what is visible, and distance culling has already
+  // hidden the far side of the world: show everything for the compile, so
+  // nothing has to be compiled (a freeze of seconds) the first time it is seen
+  const hidden: Object3D[] = []
+  scene.traverse((o) => { if (!o.visible) { hidden.push(o); o.visible = true } })
+  try {
   if (compile) {
-    await compile.call(gl, scene, camera)
+    // some drivers never report a program as finished; never let that keep
+    // the visitor on the splash screen for good
+    const t0 = performance.now()
+    let timedOut = false
+    await Promise.race([
+      compile.call(gl, scene, camera),
+      new Promise<void>((r) => setTimeout(() => { timedOut = true; r() }, 15000)),
+    ])
+    if (import.meta.env.DEV) console.log(`[warm] shaders ${timedOut ? 'TIMED OUT' : 'ready'} in ${Math.round(performance.now() - t0)} ms`)
   } else {
     gl.compile(scene, camera)
   }
+  } finally {
+    for (const o of hidden) o.visible = false
+  }
+  // and put every texture on the GPU now, not the first time it comes into
+  // view (an upload is a visible hitch on the way through the world)
+  const seen = new Set<Texture>()
+  scene.traverse((o) => {
+    const m = (o as Mesh).material
+    if (!m) return
+    for (const mat of Array.isArray(m) ? m : [m]) {
+      for (const v of Object.values(mat)) {
+        if (v instanceof Texture && !seen.has(v) && !(v as VideoTexture).isVideoTexture) {
+          seen.add(v)
+          gl.initTexture(v)
+        }
+      }
+    }
+  })
+  if (import.meta.env.DEV) console.log(`[warm] ${seen.size} textures uploaded`)
 }

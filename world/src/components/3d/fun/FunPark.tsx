@@ -1,7 +1,8 @@
-import { useRef } from 'react'
+import { useEffect, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { Text } from '@react-three/drei'
-import type { PointLight } from 'three'
+import { Vector3 } from 'three'
+import { registerLamp } from '../LightPool'
 import { DISPLAY_FONT } from '../Props'
 import { showResult } from '../../../systems/Workout'
 import { HeavyBag, SkipRope, FloorWork, PlyoBox, BattleRopes, TyreFlip, HammerTyre, HighStriker, KeepyUppy } from './Workouts'
@@ -15,7 +16,6 @@ import { ph, pw, useParkMaterials, useStation, type ParkMats } from './common'
  */
 function PhotoSpot({ m }: { m: ParkMats }) {
   const LX = -19, LZ = 6
-  const flash = useRef<PointLight>(null)
   const pop = useRef(0)
   useStation({
     id: 'fp-photo', def: 'photo_spot', lx: LX, lz: LZ, yaw: Math.PI / 2, label: 'STRIKE A POSE',
@@ -26,12 +26,15 @@ function PhotoSpot({ m }: { m: ParkMats }) {
       },
     },
   })
-  useFrame((_, dt) => {
-    pop.current = Math.max(0, pop.current - dt * 5)
-    if (flash.current) flash.current.intensity = pop.current * 60
-  })
+  useFrame((_, dt) => { pop.current = Math.max(0, pop.current - dt * 5) })
   const [bx, bz] = pw(LX - 1.3, LZ)
   const [cx, cz] = pw(LX + 3.4, LZ)
+  // the flash borrows one of the world's pooled lights (a light of its own
+  // would change the light count and recompile every shader in the world)
+  useEffect(() => registerLamp({
+    position: new Vector3(cx, ph(LX + 3.4, LZ) + 1.5, cz), color: '#f4f8ff', distance: 9,
+    intensity: () => pop.current * 60,
+  }), [cx, cz])
   return (
     <group>
       {/* the backdrop */}
@@ -55,7 +58,6 @@ function PhotoSpot({ m }: { m: ParkMats }) {
         <mesh position={[0, 1.4, 0.131]} rotation={[Math.PI / 2, 0, 0]}><circleGeometry args={[0.035, 16]} /><meshStandardMaterial color="#0c1a2a" roughness={0.05} metalness={0.8} /></mesh>
         <mesh position={[0.6, 1.55, 0]}><torusGeometry args={[0.28, 0.035, 8, 32]} /><meshStandardMaterial color="#ffffff" emissive="#ffffff" emissiveIntensity={1.2} /></mesh>
         <mesh position={[0.6, 0.75, 0]} material={m.black}><cylinderGeometry args={[0.012, 0.012, 1.5, 5]} /></mesh>
-        <pointLight ref={flash} position={[0, 1.5, 0.3]} intensity={0} distance={9} color="#f4f8ff" />
       </group>
     </group>
   )

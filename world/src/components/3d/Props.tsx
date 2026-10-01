@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useRef, useState } from 'react'
+import { Suspense, createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { Billboard, Text, useTexture } from '@react-three/drei'
 import {
@@ -14,24 +14,51 @@ export const DISPLAY_FONT = '/fonts/BarlowCondensed-Bold.ttf'
 export const BODY_FONT = '/fonts/Inter-Variable.ttf'
 export const MINT = '#1DE9B6'
 
-/** Mounts children only once the player is close, and unmounts them again. */
+/** Whether the area this component lives in is in play (near the player). */
+const NearContext = createContext<{ active: boolean }>({ active: true })
+/** Read `.active` in a frame loop and skip the work while the area is hidden. */
+export const useNearActive = () => useContext(NearContext)
+
+/**
+ * An area of the world. It is built while the splash screen is up, with
+ * everything else, so its shaders are compiled and its textures uploaded
+ * before the visitor arrives; after that it is never torn down (rebuilding
+ * an area as you walked up to it was what made the world hitch). Far away it
+ * is simply switched off: not drawn, no matrix updates, and components that
+ * ask `useNearActive()` skip their per-frame work.
+ */
 export function Near({
   pos, dist = 70, children,
 }: { pos: [number, number]; dist?: number; children: React.ReactNode }) {
-  const [on, setOn] = useState(false)
+  const ready = useStore((s) => s.worldReady)
   const radiusScale = useStore((s) => s.preset.streamLoadRadius)
-  const t = useRef(0)
+  const state = useMemo(() => ({ active: true }), [])
+  const group = useRef<Group>(null)
+  const t = useRef(1)
   useFrame((_, dt) => {
     t.current += dt
-    if (t.current < 0.5) return
+    if (t.current < 0.25) return
     t.current = 0
+    const g = group.current
+    if (!g) return
     const d = Math.hypot(player.pos.x - pos[0], player.pos.z - pos[1])
-    // hysteresis so a location doesn't flicker on the boundary
+    // hysteresis so a location doesn't flicker on the boundary; everything
+    // is on until the world is ready, so the warm-up sees all of it
     const limit = dist * radiusScale
-    const should = d < (on ? limit + 12 : limit)
-    if (should !== on) setOn(should)
+    const should = !ready || d < (state.active ? limit + 12 : limit)
+    if (should === state.active) return
+    state.active = should
+    g.visible = should
+    g.matrixWorldAutoUpdate = should
+    if (should) g.updateMatrixWorld(true)
   })
-  return <Suspense fallback={null}>{on ? children : null}</Suspense>
+  return (
+    <NearContext.Provider value={state}>
+      <group ref={group}>
+        <Suspense fallback={null}>{children}</Suspense>
+      </group>
+    </NearContext.Provider>
+  )
 }
 
 /** Soft mint ring on the ground that marks something you can interact with. */

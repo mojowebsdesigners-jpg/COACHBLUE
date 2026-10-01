@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
-import { resetPerformanceWatch, watchPerformance } from '../../systems/PerformanceManager'
+import { resetPerformanceWatch } from '../../systems/PerformanceManager'
 import { useStore } from '../../state/store'
 import { harmonizeMaterials } from '../../lib/freeze'
 
@@ -81,15 +81,12 @@ export function PerformanceWatch() {
       }
     }
 
-    // only let the tier drop once resolution can give no more
-    if (a.scale > MIN_SCALE + 0.01) return
-    const moved = watchPerformance(dt)
-    if (moved) {
-      useStore.getState().showToast(
-        'GRAPHICS EASED',
-        `Running at ${moved.toUpperCase()} to keep things smooth — change it in Settings`,
-      )
-    }
+    // The tier itself never changes during play. Stepping it down switched
+    // shadows and post effects off and rebuilt the forest and grass: every
+    // shader in the world recompiled and every instance was regenerated at
+    // once, a freeze of seconds, which is worse than any slow frame it was
+    // meant to cure. The tier is settled at start-up behind the splash;
+    // after that only the resolution flexes, and that costs nothing to change.
   })
 
   return null

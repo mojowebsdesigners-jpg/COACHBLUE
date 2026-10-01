@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { useThree } from '@react-three/fiber'
+import { useProgress } from '@react-three/drei'
 import { warmShaders } from '../../systems/AssetManager'
 import { useStore } from '../../state/store'
 
@@ -18,8 +19,22 @@ export function ShaderWarmup() {
 
   useEffect(() => {
     let cancelled = false
-    // one frame of grace so children have mounted and added themselves
-    const id = requestAnimationFrame(() => {
+    // every area builds behind the splash, each loading its own models,
+    // fonts and textures: wait until nothing has loaded for half a second
+    // (at most twenty), then compile and upload the lot in one go
+    let id = 0
+    const t0 = performance.now()
+    let quietSince = 0
+    const waitForQuiet = () => {
+      if (cancelled) return
+      const now = performance.now()
+      if (useProgress.getState().active) quietSince = 0
+      else if (!quietSince) quietSince = now
+      if ((quietSince && now - quietSince > 500) || now - t0 > 20000) warm()
+      else id = requestAnimationFrame(waitForQuiet)
+    }
+    id = requestAnimationFrame(waitForQuiet)
+    const warm = () => {
       warmShaders(gl, scene, camera)
         .catch(() => {})
         .finally(() => {
@@ -29,7 +44,7 @@ export function ShaderWarmup() {
           invalidate()
           setWorldReady(true)
         })
-    })
+    }
     return () => {
       cancelled = true
       cancelAnimationFrame(id)

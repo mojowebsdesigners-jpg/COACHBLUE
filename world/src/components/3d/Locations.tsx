@@ -10,7 +10,7 @@ import { coach } from '../../data/coach'
 import { transformations } from '../../data/transformations'
 import {
   GYM, GYM_SLAB_W, GYM_SLAB_D, PATH_HALF_WIDTH, addBoxFor, addCollider, addGrassClear, addPlatform, baseGround, groundHeight,
-  pathCurve, pathDistance,
+  pathCurve, pathDistance, pathSamples,
 } from '../../lib/terrain'
 import { player, useStore } from '../../state/store'
 import { registerInteractable } from './InteractionSystem'
@@ -216,22 +216,34 @@ export function Challenge() {
     focus: { dist: 6, height: 2.6 },
   }), [x, z, y])
 
+  // the two slabs stand either side of the road, not on it (they used to
+  // stand three metres apart in the carriageway and the car could not get
+  // between them), turned to face whoever is coming up the road
+  const yaw = useMemo(() => {
+    let bi = 0, bd = Infinity
+    pathSamples.forEach((s, i) => { const d = (s.x - x) ** 2 + (s.z - z) ** 2; if (d < bd) { bd = d; bi = i } })
+    const a = pathSamples[Math.max(0, bi - 2)], b = pathSamples[Math.min(pathSamples.length - 1, bi + 2)]
+    return Math.atan2(a.x - b.x, a.z - b.z)
+  }, [x, z])
+  const SIDE = PATH_HALF_WIDTH + 1.4 + 1.6
   return (
     <group>
-      {[-2.6, 2.6].map((dx, i) => (
-        <mesh key={dx} castShadow receiveShadow position={[x + dx, y + 1.5, z]} rotation={[0, i ? -0.3 : 0.3, 0]}>
-          <boxGeometry args={[2.2, 3, 0.5]} />
-          <meshStandardMaterial color="#3c4042" roughness={0.9} />
-        </mesh>
-      ))}
-      <Text font={BODY_FONT} position={[x - 2.6, y + 1.9, z + 0.32]} rotation={[0, 0.3, 0]} fontSize={0.15}
-        color="#d8d2c6" maxWidth={1.8} anchorX="center" textAlign="center">
-        {`“${coach.quotePair.client}”`}
-      </Text>
-      <Text font={BODY_FONT} position={[x + 2.6, y + 1.9, z + 0.32]} rotation={[0, -0.3, 0]} fontSize={0.15}
-        color={MINT} maxWidth={1.8} anchorX="center" textAlign="center">
-        {`“${coach.quotePair.coach}”`}
-      </Text>
+      <group position={[x, y, z]} rotation={[0, yaw, 0]}>
+        {[-SIDE, SIDE].map((dx, i) => (
+          <mesh key={dx} castShadow receiveShadow position={[dx, 1.5, 0]} rotation={[0, i ? -0.3 : 0.3, 0]}>
+            <boxGeometry args={[2.2, 3, 0.5]} />
+            <meshStandardMaterial color="#3c4042" roughness={0.9} />
+          </mesh>
+        ))}
+        <Text font={BODY_FONT} position={[-SIDE + 0.1, 1.9, 0.3]} rotation={[0, 0.3, 0]} fontSize={0.15}
+          color="#d8d2c6" maxWidth={1.8} anchorX="center" textAlign="center">
+          {`“${coach.quotePair.client}”`}
+        </Text>
+        <Text font={BODY_FONT} position={[SIDE - 0.1, 1.9, 0.3]} rotation={[0, -0.3, 0]} fontSize={0.15}
+          color={MINT} maxWidth={1.8} anchorX="center" textAlign="center">
+          {`“${coach.quotePair.coach}”`}
+        </Text>
+      </group>
       <WorldWord text="COMMIT" position={[x, y + 5.2, z]} size={0.7} opacity={0.26} />
       <GlowRing position={[x, y + 0.05, z + 1.6]} radius={1.2} />
     </group>

@@ -312,7 +312,16 @@ export function stepVehicle(dt: number) {
     const step = vehicle.speed * dt
     const nx = vehicle.pos.x + Math.sin(vehicle.yaw) * step
     const nz = vehicle.pos.z + Math.cos(vehicle.yaw) * step
-    const fixed = resolveCollisions(nx, nz, CAR.bodyRadius, carCollider)
+    // the body's footprint: three overlapping circles down its length (4.8 m
+    // by 2.1 m), not one big circle, so it fits any gap a real car would
+    const ax = Math.sin(vehicle.yaw), az = Math.cos(vehicle.yaw)
+    const fixed = { x: nx, z: nz }
+    for (const k of [1.35, -1.35, 0]) {
+      const cx = fixed.x + ax * k, cz = fixed.z + az * k
+      const c = resolveCollisions(cx, cz, 1.05, carCollider)
+      fixed.x += c.x - cx
+      fixed.z += c.z - cz
+    }
     // a kerb higher than a tyre can climb stops the car: probe the bumper
     // (front or back, whichever way it is going) and both of its corners
     const dir = Math.sign(step)

@@ -7,6 +7,7 @@ import { aimBone } from '../../lib/ik'
 import { addDynamicCollider, groundHeight } from '../../lib/terrain'
 import { relaxPosture, solveExercise, type Exercise, type Grip } from '../../systems/ExercisePose'
 import { yielded } from '../../systems/Workout'
+import { useNearActive } from './Props'
 
 export type { Exercise }
 
@@ -112,9 +113,10 @@ export function Athlete({
     return () => { clip?.stop() }
   }, [actions, exercise])
 
+  const area = useNearActive()
   useFrame((_, delta) => {
     const g = group.current
-    if (!g) return
+    if (!g || !area.active) return
     const dt = Math.min(delta, 0.05)
     phase.current += dt * speed
 
