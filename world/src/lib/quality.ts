@@ -20,28 +20,29 @@ export type Preset = {
   depthOfField: boolean
   drawDistance: number      // fog density multiplier (lower = see further)
   streamLoadRadius: number  // how early a location mounts
+  treeLod: number           // metres at which trees switch to their simpler stand-in
 }
 
 export const PRESETS: Record<ResolvedTier, Preset> = {
   ultra: {
     name: 'ultra', dpr: [1, 2], shadows: true, shadowSize: 2048, trees: 2600, grass: 30000,
     grassRadius: 22, rocks: 110, motes: 520, leaves: 220, birds: true, post: true,
-    depthOfField: true, drawDistance: 0.85, streamLoadRadius: 1.15,
+    depthOfField: true, drawDistance: 0.85, streamLoadRadius: 1.15, treeLod: 90,
   },
   high: {
     name: 'high', dpr: [1, 1.75], shadows: true, shadowSize: 2048, trees: 2100, grass: 24000,
     grassRadius: 18, rocks: 90, motes: 400, leaves: 140, birds: true, post: true,
-    depthOfField: false, drawDistance: 1, streamLoadRadius: 1,
+    depthOfField: false, drawDistance: 1, streamLoadRadius: 1, treeLod: 70,
   },
   medium: {
     name: 'medium', dpr: [1, 1.4], shadows: true, shadowSize: 1024, trees: 1400, grass: 12000,
     grassRadius: 14, rocks: 60, motes: 220, leaves: 70, birds: true, post: false,
-    depthOfField: false, drawDistance: 1.15, streamLoadRadius: 0.85,
+    depthOfField: false, drawDistance: 1.15, streamLoadRadius: 0.85, treeLod: 55,
   },
   low: {
     name: 'low', dpr: [0.8, 1.15], shadows: false, shadowSize: 512, trees: 700, grass: 4000,
     grassRadius: 10, rocks: 30, motes: 90, leaves: 0, birds: false, post: false,
-    depthOfField: false, drawDistance: 1.35, streamLoadRadius: 0.7,
+    depthOfField: false, drawDistance: 1.35, streamLoadRadius: 0.7, treeLod: 40,
   },
 }
 
@@ -74,10 +75,47 @@ export function detectTier(): ResolvedTier {
   return 'high'
 }
 
+/** A phone or tablet: touch is the main pointer and there is no mouse. */
+export function isHandheld() {
+  if (typeof window === 'undefined') return false
+  return !!window.matchMedia?.('(pointer: coarse)').matches && !window.matchMedia?.('(any-pointer: fine)').matches
+}
+
+/**
+ * The same tier, trimmed for a phone. A phone GPU is small, shares memory
+ * with the CPU and throttles as it warms, and its screen packs two or three
+ * pixels into every CSS pixel. The shadow pass (a second draw of everything)
+ * and the extra resolution are what it runs out of first, and on a small
+ * screen they are the least visible, so they go; the forest and grass thin a
+ * little. Only applied on AUTO: a tier picked by hand is taken as given.
+ */
+const handheldCache = new Map<ResolvedTier, Preset>()
+function forHandheld(p: Preset): Preset {
+  let t = handheldCache.get(p.name)
+  if (!t) {
+    t = {
+      ...p,
+      dpr: [Math.min(p.dpr[0], 0.85), Math.min(p.dpr[1], 1.2)],
+      shadows: false,
+      post: false,
+      depthOfField: false,
+      trees: Math.round(p.trees * 0.75),
+      grass: Math.round(p.grass * 0.6),
+      grassRadius: Math.min(p.grassRadius, 12),
+      motes: Math.round(p.motes * 0.5),
+      leaves: Math.round(p.leaves * 0.5),
+      treeLod: Math.min(p.treeLod, 40),
+    }
+    handheldCache.set(p.name, t)
+  }
+  return t
+}
+
 export function resolveTier(tier: Tier, cache?: { auto?: ResolvedTier }): Preset {
   if (tier !== 'auto') return PRESETS[tier]
   if (cache && !cache.auto) cache.auto = detectTier()
-  return PRESETS[cache?.auto ?? detectTier()]
+  const p = PRESETS[cache?.auto ?? detectTier()]
+  return isHandheld() ? forHandheld(p) : p
 }
 
 export function webglAvailable() {

@@ -21,7 +21,20 @@ function useTube(radius: number, segs = 32) {
     const m = ref.current
     if (!m) return
     const g = new TubeGeometry(new CatmullRomCurve3(pts), segs, radius, 5, false)
-    m.geometry.dispose()
+    // same segment count every time, so after the first build the new shape
+    // is copied into the buffers already on the GPU instead of replacing them
+    const old = m.geometry
+    const pos = old.attributes.position
+    if (pos && pos.count === g.attributes.position.count) {
+      ;(pos.array as Float32Array).set(g.attributes.position.array as Float32Array)
+      ;(old.attributes.normal.array as Float32Array).set(g.attributes.normal.array as Float32Array)
+      pos.needsUpdate = true
+      old.attributes.normal.needsUpdate = true
+      old.computeBoundingSphere()
+      g.dispose()
+      return
+    }
+    old.dispose()
     m.geometry = g
   }
   return { ref, set }
@@ -158,8 +171,12 @@ export function BattleRopes({ m }: { m: ParkMats }) {
     const [x, z] = pw(LX - 0.45, LZ)
     return [new Vector3(x, ph(LX, LZ) + 0.1, z - 0.22), new Vector3(x, ph(LX, LZ) + 0.1, z + 0.22)]
   }, [])
+  const atRest = useRef(false)
   useFrame(() => {
     const on = onStation('fp-ropes')
+    // lying still on the ground, the ropes only need building once
+    if (!on && atRest.current) return
+    atRest.current = !on && !!left.ref.current && !!right.ref.current
     const t = workout.phase * repRate('ropes')
     for (const [side, tube] of [[0, left], [1, right]] as const) {
       const hand = on ? workout.hands[side] : rest[side]

@@ -23,6 +23,8 @@ type Entry = {
   spheres: Float32Array
   total: number
   near: number
+  /** a cheaper stand-in drawn for the instances beyond `from` metres */
+  lod: { mesh: InstancedMesh; from: number } | null
 }
 
 const entries = new Set<Entry>()
@@ -35,13 +37,26 @@ const _last = new Vector3(1e9, 0, 0)
 const _lastDir = new Vector3()
 const _dir = new Vector3()
 let clock = 0
+/**
+ * Beyond this, an instance is lost in the fog and not drawn at all. Trees a
+ * quarter of a mile off are a few hazy pixels each but still cost their full
+ * two thousand vertices and an alpha-tested leaf pass; at the camp that was
+ * half the frame. Set from the fog, so the cut lands where the haze is
+ * already all but opaque.
+ */
+let far = Infinity
+export function setInstanceFar(d: number) {
+  if (d !== far) { far = d; _last.set(1e9, 0, 0) }
+}
 
 /**
  * Take over culling for a mesh whose instance matrices (and colours) are
  * already set. `near`: instances this close to the camera are always kept,
  * for the shadows they cast into view.
  */
-export function registerInstanceCull(mesh: InstancedMesh, near = 45) {
+export function registerInstanceCull(
+  mesh: InstancedMesh, near = 45, lod: { mesh: InstancedMesh; from: number } | null = null,
+) {
   const total = mesh.count
   const matrices = new Float32Array(mesh.instanceMatrix.array.slice(0, total * 16))
   const colors = mesh.instanceColor ? new Float32Array(mesh.instanceColor.array.slice(0, total * 3)) : null
@@ -54,11 +69,16 @@ export function registerInstanceCull(mesh: InstancedMesh, near = 45) {
     _s.copy(local).applyMatrix4(_m)
     spheres.set([_s.center.x, _s.center.y, _s.center.z, _s.radius], i * 4)
   }
-  const e: Entry = { mesh, matrices, colors, spheres, total, near }
+  const e: Entry = { mesh, matrices, colors, spheres, total, near, lod }
   entries.add(e)
   // the compacted buffer is re-uploaded often; say so
   mesh.instanceMatrix.setUsage(35048)   // DynamicDrawUsage
   mesh.frustumCulled = false            // we do it per instance now
+  if (lod) {
+    lod.mesh.instanceMatrix.setUsage(35048)
+    lod.mesh.frustumCulled = false
+    lod.mesh.count = 0
+  }
   _last.set(1e9, 0, 0)                  // force a pass next frame
   return () => {
     entries.delete(e)
@@ -67,6 +87,7 @@ export function registerInstanceCull(mesh: InstancedMesh, near = 45) {
     if (colors && mesh.instanceColor) mesh.instanceColor.array.set(colors)
     mesh.count = total
     mesh.instanceMatrix.needsUpdate = true
+    if (lod) lod.mesh.count = 0
   }
 }
 
@@ -111,18 +132,33 @@ export function updateInstanceCulling(camera: Camera, dt: number) {
   for (const e of entries) {
     const out = e.mesh.instanceMatrix.array as Float32Array
     const outC = e.mesh.instanceColor?.array as Float32Array | undefined
-    let n = 0
+    const outL = e.lod?.mesh.instanceMatrix.array as Float32Array | undefined
+    const lodFrom = e.lod ? e.lod.from : Infinity
+    let n = 0, nl = 0
     for (let i = 0; i < e.total; i++) {
       const k = i * 4
       _s.center.set(e.spheres[k], e.spheres[k + 1], e.spheres[k + 2])
       _s.radius = e.spheres[k + 3]
       const d = _s.center.distanceTo(_c) - _s.radius
+      if (d > far) continue
       if (d > e.near && !_f.intersectsSphere(_s)) continue
+      if (outL && d > lodFrom) {
+        outL.set(e.matrices.subarray(i * 16, i * 16 + 16), nl * 16)
+        nl++
+        continue
+      }
       out.set(e.matrices.subarray(i * 16, i * 16 + 16), n * 16)
       if (outC && e.colors) outC.set(e.colors.subarray(i * 3, i * 3 + 3), n * 3)
       n++
     }
     e.mesh.count = n
+    if (e.lod) {
+      const lm = e.lod.mesh
+      lm.count = nl
+      lm.instanceMatrix.clearUpdateRanges()
+      lm.instanceMatrix.addUpdateRange(0, Math.max(16, nl * 16))
+      lm.instanceMatrix.needsUpdate = true
+    }
     // upload only the part of the buffer in use
     const im = e.mesh.instanceMatrix
     im.clearUpdateRanges()

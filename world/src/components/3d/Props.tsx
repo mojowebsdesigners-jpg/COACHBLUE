@@ -2,7 +2,7 @@ import { Suspense, createContext, useContext, useEffect, useMemo, useRef, useSta
 import { useFrame } from '@react-three/fiber'
 import { Billboard, Text, useTexture } from '@react-three/drei'
 import {
-  Group, Mesh, MeshStandardMaterial, Vector3, VideoTexture, SRGBColorSpace,
+  Group, Mesh, MeshStandardMaterial, Object3D, Vector3, VideoTexture, SRGBColorSpace,
   DoubleSide, MathUtils,
 } from 'three'
 import { registerLamp } from './LightPool'
@@ -49,12 +49,17 @@ export function Near({
     if (should === state.active) return
     state.active = should
     g.visible = should
-    g.matrixWorldAutoUpdate = should
     if (should) g.updateMatrixWorld(true)
   })
+  // Switched off, the whole area skips the per-frame matrix pass: hiding it
+  // stops the draw, but three.js would still walk and update every object
+  // inside. Turning back on refreshes it in full (above).
+  const skipWhenOff = useMemo(() => function (this: Group, force?: boolean) {
+    if (state.active) Object3D.prototype.updateMatrixWorld.call(this, force)
+  }, [state])
   return (
     <NearContext.Provider value={state}>
-      <group ref={group}>
+      <group ref={group} updateMatrixWorld={skipWhenOff}>
         <Suspense fallback={null}>{children}</Suspense>
       </group>
     </NearContext.Provider>

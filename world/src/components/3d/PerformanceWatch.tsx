@@ -3,6 +3,8 @@ import { useFrame, useThree } from '@react-three/fiber'
 import { resetPerformanceWatch } from '../../systems/PerformanceManager'
 import { useStore } from '../../state/store'
 import { harmonizeMaterials } from '../../lib/freeze'
+import { setRenderNow } from '../../lib/share'
+import { setInstanceFar } from '../../lib/instanceCull'
 
 /** Frame rate the adaptive resolution aims to hold. */
 const TARGET_FPS = 57
@@ -27,18 +29,33 @@ export function PerformanceWatch() {
   const gl = useThree((s) => s.gl)
   const scene = useThree((s) => s.scene)
   const camera = useThree((s) => s.camera)
+  // photo saves render a frame on demand rather than keeping every frame
+  const advance = useThree((s) => s.advance)
+  useEffect(() => {
+    setRenderNow(() => advance(performance.now()))
+    return () => setRenderNow(null)
+  }, [advance])
   // for profiling from the console: draw calls, triangles, object count
   useEffect(() => {
     const w = window as unknown as { __cb?: Record<string, unknown> }
-    w.__cb = { ...w.__cb, gl, scene, camera }
+    w.__cb = { ...w.__cb, gl, scene, camera, setInstanceFar }
   }, [gl, scene, camera])
-  // as the world streams in, keep shared materials on one shader variant each
+  // as the world streams in, keep shared materials on one shader variant each;
+  // once it has settled a walk of the whole scene every few seconds is a
+  // stutter on a phone for nothing, so it slows right down
   useEffect(() => {
-    const id = window.setInterval(() => harmonizeMaterials(scene), 3000)
-    return () => window.clearInterval(id)
+    let id = 0
+    const started = performance.now()
+    const run = () => {
+      harmonizeMaterials(scene)
+      const settled = useStore.getState().worldReady && performance.now() - started > 30000
+      id = window.setTimeout(run, settled ? 20000 : 3000)
+    }
+    id = window.setTimeout(run, 3000)
+    return () => window.clearTimeout(id)
   }, [scene])
   const preset = useStore((s) => s.preset)
-  const acc = useRef({ t: 0, frames: 0, scale: 1, calm: 0 })
+  const acc = useRef({ t: 0, frames: 0, scale: 1, calm: 0, hold: 0 })
 
   useEffect(() => resetPerformanceWatch(), [])
   // a new tier starts from its own full resolution
@@ -65,15 +82,24 @@ export function PerformanceWatch() {
       const fps = a.frames / a.t
       a.t = 0
       a.frames = 0
+      a.hold = Math.max(0, a.hold - 0.5)
       const before = a.scale
+      // Every change resizes the canvas and every post-processing buffer,
+      // which itself costs a frame or two, so it changes in whole steps and
+      // never see-saws: after stepping down it waits a good while before
+      // trying more pixels again.
       if (fps < TARGET_FPS - 4) {
         // slow: step down in proportion to how far off it is
-        a.scale = Math.max(MIN_SCALE, a.scale * Math.max(0.85, Math.sqrt(fps / TARGET_FPS)))
+        const want = a.scale * Math.max(0.85, Math.sqrt(fps / TARGET_FPS))
+        a.scale = Math.max(MIN_SCALE, Math.floor(want * 20) / 20)
         a.calm = 0
-      } else if (fps > TARGET_FPS + 1) {
-        // only give pixels back after a couple of seconds of headroom
+        a.hold = 8
+      } else if (fps > TARGET_FPS + 1 && a.hold === 0) {
+        // only give pixels back after a few seconds of headroom
         a.calm += 0.5
-        if (a.calm >= 2) a.scale = Math.min(1, a.scale + 0.05)
+        if (a.calm >= 3) { a.scale = Math.min(1, a.scale + 0.05); a.calm = 0; a.hold = 3 }
+      } else {
+        a.calm = 0
       }
       if (a.scale !== before) {
         const full = Math.min(window.devicePixelRatio, preset.dpr[1])

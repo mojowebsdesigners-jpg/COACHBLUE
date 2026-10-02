@@ -15,6 +15,16 @@ function loadImage(src: string) {
   })
 }
 
+/**
+ * Draws one frame on demand. The 3D canvas does not keep its picture between
+ * frames (keeping it costs every frame, heavily on phones), so the view is
+ * rendered afresh and copied in the same moment, before the browser clears it.
+ */
+let renderNow: (() => void) | null = null
+export function setRenderNow(fn: (() => void) | null) {
+  renderNow = fn
+}
+
 export async function buildShareCard(opts: { found: number; total: number }) {
   const source = document.querySelector('canvas')
   if (!source) return null
@@ -30,6 +40,7 @@ export async function buildShareCard(opts: { found: number; total: number }) {
   const w = source.width * scale
   const h = source.height * scale
   try {
+    renderNow?.()
     ctx.drawImage(source, (WIDTH - w) / 2, (HEIGHT - h) / 2, w, h)
   } catch {
     return null    // tainted or lost context — skip rather than fail loudly

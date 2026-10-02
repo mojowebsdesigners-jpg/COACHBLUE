@@ -18,11 +18,11 @@ import { applyWind } from './Forest'
  * branches, and alpha-cut leaf cards clustered on the branch ends. Two meshes
  * per species (wood, foliage) so bark and leaves can use their own materials.
  */
-type Limb = { from: Vector3; to: Vector3; r0: number; r1: number }
+type Limb = { from: Vector3; to: Vector3; r0: number; r1: number; depth: number }
 
 const up = new Vector3(0, 1, 0)
 
-function limbGeometry(limbs: Limb[]) {
+function limbGeometry(limbs: Limb[], radial = 7) {
   const parts: BufferGeometry[] = []
   const dir = new Vector3()
   const q = new Quaternion()
@@ -30,7 +30,7 @@ function limbGeometry(limbs: Limb[]) {
     dir.copy(l.to).sub(l.from)
     const len = dir.length()
     if (len < 0.01) continue
-    const g = new CylinderGeometry(l.r1, l.r0, len, 7, 1, true)
+    const g = new CylinderGeometry(l.r1, l.r0, len, radial, 1, true)
     g.translate(0, len / 2, 0)
     q.setFromUnitVectors(up, dir.clone().normalize())
     g.applyMatrix4(new Matrix4().makeRotationFromQuaternion(q))
@@ -42,18 +42,18 @@ function limbGeometry(limbs: Limb[]) {
   return merged
 }
 
-function cardGeometry(spots: { pos: Vector3; size: number }[]) {
+function cardGeometry(spots: { pos: Vector3; size: number }[], quads = 3, rnd: () => number = rand) {
   const parts: BufferGeometry[] = []
   for (const s of spots) {
     // each cluster its own shade and warmth; lower, inner clusters darker
-    const shade = 0.78 + rand() * 0.34
-    const warm = (rand() - 0.5) * 0.12
+    const shade = 0.78 + rnd() * 0.34
+    const warm = (rnd() - 0.5) * 0.12
     // three crossed quads per cluster reads as volume from any angle
-    for (let k = 0; k < 3; k++) {
+    for (let k = 0; k < quads; k++) {
       const g = new PlaneGeometry(s.size, s.size)
-      g.rotateZ(rand() * Math.PI * 2)
-      g.rotateY((k / 3) * Math.PI + rand() * 0.4)
-      g.rotateX((rand() - 0.5) * 0.9)
+      g.rotateZ(rnd() * Math.PI * 2)
+      g.rotateY((k / quads) * Math.PI + rnd() * 0.4)
+      g.rotateX((rnd() - 0.5) * 0.9)
       g.translate(s.pos.x, s.pos.y, s.pos.z)
       const n = g.attributes.position.count
       const col = new Float32Array(n * 3)
@@ -69,6 +69,17 @@ function cardGeometry(spots: { pos: Vector3; size: number }[]) {
   const merged = mergeGeometries(parts, false)!
   merged.computeVertexNormals()
   return merged
+}
+
+/** A small seeded generator for the stand-in trees' leaf cards. */
+function lodRandom(seed: number) {
+  let t = (seed * 2654435761) >>> 0
+  return () => {
+    t = (t + 0x6d2b79f5) >>> 0
+    let r = Math.imul(t ^ (t >>> 15), 1 | t)
+    r ^= r + Math.imul(r ^ (r >>> 7), 61 | r)
+    return ((r ^ (r >>> 14)) >>> 0) / 4294967296
+  }
 }
 
 /** Recursive branching: trunk splits into limbs, limbs into twigs. */
@@ -90,7 +101,7 @@ function growTree(opts: {
     // bend the limb slightly so nothing is dead straight
     to.x += (rand() - 0.5) * len * 0.22
     to.z += (rand() - 0.5) * len * 0.22
-    limbs.push({ from, to, r0: radius, r1: radius * 0.68 })
+    limbs.push({ from, to, r0: radius, r1: radius * 0.68, depth })
 
     if (depth >= opts.splits || len < 0.5) {
       tips.push({ pos: to, size: opts.leafSize * (0.75 + rand() * 0.6) })
@@ -134,14 +145,26 @@ function growTree(opts: {
   let radius = opts.baseRadius
   for (let i = 0; i < segs; i++) {
     const to = pos.clone().addScaledVector(dir, trunkLen / segs)
-    limbs.push({ from: pos.clone(), to: to.clone(), r0: radius, r1: radius * 0.82 })
+    limbs.push({ from: pos.clone(), to: to.clone(), r0: radius, r1: radius * 0.82, depth: -1 })
     radius *= 0.82
     pos = to
     dir = dir.clone().add(new Vector3((rand() - 0.5) * 0.12, 0, (rand() - 0.5) * 0.12)).normalize()
   }
   grow(pos, dir, opts.height * (1 - opts.crownStart) * 0.55, radius, 0)
 
-  return { wood: limbGeometry(limbs), leaves: cardGeometry(tips) }
+  // The same tree for the middle distance: trunk and main limbs only, with a
+  // third as many leaf clusters, larger, covering the same crown. A fraction
+  // of the vertices, and past a few dozen metres the twigs it drops are
+  // sub-pixel.
+  const farTips = tips.filter((_, i) => i % 3 === 0).map((t) => ({ pos: t.pos, size: t.size * 1.7 }))
+  const leaves = cardGeometry(tips)
+  return {
+    wood: limbGeometry(limbs),
+    leaves: opts.leafSize > 0 ? leaves : null,
+    woodLod: limbGeometry(limbs.filter((l) => l.depth <= 1), 4),
+    // its own random stream: drawing from the world's would move every tree
+    leavesLod: opts.leafSize > 0 ? cardGeometry(farTips, 3, lodRandom(tips.length)) : null,
+  }
 }
 
 const SPECIES = {
@@ -199,13 +222,16 @@ function scatter(count: number, opts: { minPath: number; maxSlope: number; bias?
   return out
 }
 
-function Species({
-  wood, leaves, spots, collide,
-}: {
-  wood: BufferGeometry; leaves: BufferGeometry | null; spots: Spot[]; collide: boolean
-}) {
+type Variant = { wood: BufferGeometry; leaves: BufferGeometry | null; woodLod: BufferGeometry; leavesLod: BufferGeometry | null }
+
+function Species({ v, spots, collide }: { v: Variant; spots: Spot[]; collide: boolean }) {
+  const { wood, woodLod } = v
+  const leaves = v.leaves && v.leavesLod ? v.leaves : null
+  const leavesLod = leaves ? v.leavesLod : null
   const woodRef = useRef<InstancedMesh>(null)
   const leafRef = useRef<InstancedMesh>(null)
+  const woodLodRef = useRef<InstancedMesh>(null)
+  const leafLodRef = useRef<InstancedMesh>(null)
   const barkMat = useMemo(() => scanned('bark', 2, { roughness: 0.95 }), [])
   const leafMat = useMemo(
     () => applyWind(foliage('leafcluster', {
@@ -232,8 +258,12 @@ function Species({
       mesh.computeBoundingSphere()
     }
     if (collide) spots.forEach((s) => addCollider({ x: s.x, z: s.z, r: 0.45 * s.s + 0.25 }))
-    // draw only the trees that can be seen (or can shade what is seen)
-    const offs = [woodRef.current, leafRef.current].filter(Boolean).map((m) => registerInstanceCull(m!))
+    // draw only the trees that can be seen (or can shade what is seen), and
+    // the simpler stand-in for those further off
+    const lodFrom = useStore.getState().preset.treeLod
+    const offs = ([[woodRef.current, woodLodRef.current], [leafRef.current, leafLodRef.current]] as const)
+      .filter(([m]) => m)
+      .map(([m, lod]) => registerInstanceCull(m!, 45, lod ? { mesh: lod, from: lodFrom } : null))
     return () => offs.forEach((o) => o())
   }, [spots, collide])
 
@@ -241,8 +271,12 @@ function Species({
   return (
     <>
       <instancedMesh ref={woodRef} args={[wood, barkMat, spots.length]} castShadow receiveShadow frustumCulled={false} />
+      <instancedMesh ref={woodLodRef} args={[woodLod, barkMat, spots.length]} count={0} castShadow receiveShadow frustumCulled={false} />
       {leaves && (
         <instancedMesh ref={leafRef} args={[leaves, leafMat, spots.length]} castShadow receiveShadow frustumCulled={false} />
+      )}
+      {leavesLod && (
+        <instancedMesh ref={leafLodRef} args={[leavesLod, leafMat, spots.length]} count={0} castShadow receiveShadow frustumCulled={false} />
       )}
     </>
   )
@@ -283,19 +317,19 @@ export function Trees() {
   return (
     <group>
       {variants.pine.map((v, i) => (
-        <Species key={`p${i}`} wood={v.wood} leaves={v.leaves} spots={spots.pine[i]} collide />
+        <Species key={`p${i}`} v={v} spots={spots.pine[i]} collide />
       ))}
       {variants.broadleaf.map((v, i) => (
-        <Species key={`b${i}`} wood={v.wood} leaves={v.leaves} spots={spots.broadleaf[i]} collide />
+        <Species key={`b${i}`} v={v} spots={spots.broadleaf[i]} collide />
       ))}
       {variants.oak.map((v, i) => (
-        <Species key={`o${i}`} wood={v.wood} leaves={v.leaves} spots={spots.oak[i]} collide />
+        <Species key={`o${i}`} v={v} spots={spots.oak[i]} collide />
       ))}
       {variants.young.map((v, i) => (
-        <Species key={`y${i}`} wood={v.wood} leaves={v.leaves} spots={spots.young[i]} collide={false} />
+        <Species key={`y${i}`} v={v} spots={spots.young[i]} collide={false} />
       ))}
       {variants.dead.map((v, i) => (
-        <Species key={`d${i}`} wood={v.wood} leaves={null} spots={spots.dead[i]} collide />
+        <Species key={`d${i}`} v={v} spots={spots.dead[i]} collide />
       ))}
     </group>
   )

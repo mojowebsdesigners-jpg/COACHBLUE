@@ -357,7 +357,6 @@ export default function App() {
                     powerPreference: 'high-performance',
                     toneMapping: ACESFilmicToneMapping,
                     toneMappingExposure: SUN_EXPOSURE,
-                    preserveDrawingBuffer: true,   // so photo mode can save the view
                   }
             }
             camera={{ fov: 58, near: 0.12, far: 2600, position: [0, 6, 176] }}

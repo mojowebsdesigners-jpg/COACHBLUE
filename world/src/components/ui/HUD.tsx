@@ -1,6 +1,6 @@
 import { RadioCard, useRadio } from './RadioCard'
 import { toggle as toggleRadio } from '../../lib/radio'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { journeySteps } from '../../data/journey'
 import { isTouchDevice, setTouchAction, setTouchDive } from '../../lib/input'
 import { player, useStore } from '../../state/store'
@@ -199,7 +199,12 @@ export function HUD() {
 export function TouchControls({ onStick }: { onStick: (x: number, y: number) => void }) {
   const phase = useStore((s) => s.phase)
   const photoMode = useStore((s) => s.photoMode)
-  const [knob, setKnob] = useState({ x: 0, y: 0 })
+  // the knob follows the thumb directly: a React render per touch-move
+  // (up to 120 a second) competes with the 3D frame on a phone
+  const knob = useRef<HTMLElement>(null)
+  const placeKnob = (x: number, y: number) => {
+    if (knob.current) knob.current.style.transform = `translate(${x}px, ${y}px)`
+  }
   const [touch, setTouch] = useState(false)
 
   useEffect(() => {
@@ -223,11 +228,11 @@ export function TouchControls({ onStick }: { onStick: (x: number, y: number) => 
     const len = Math.hypot(dx, dy)
     const nx = len > 1 ? dx / len : dx
     const ny = len > 1 ? dy / len : dy
-    setKnob({ x: nx * 38, y: ny * 38 })
+    placeKnob(nx * 38, ny * 38)
     onStick(nx, ny)
   }
   const stop = () => {
-    setKnob({ x: 0, y: 0 })
+    placeKnob(0, 0)
     onStick(0, 0)
     player.speed = 0
   }
@@ -241,7 +246,7 @@ export function TouchControls({ onStick }: { onStick: (x: number, y: number) => 
         onPointerUp={stop}
         onPointerCancel={stop}
       >
-        <i style={{ transform: `translate(${knob.x}px, ${knob.y}px)` }} />
+        <i ref={knob} />
       </div>
       <button className="touch-e" onClick={triggerNearest}>E</button>
       {/* jump in the world; in an activity, a tap is a rep and holding keeps going */}

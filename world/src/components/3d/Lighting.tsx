@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import {
-  BackSide, FogExp2, Mesh, MeshBasicMaterial, PMREMGenerator, Scene,
+  BackSide, Color, FogExp2, Mesh, MeshBasicMaterial, PMREMGenerator, Scene,
   SphereGeometry, Vector3, type DirectionalLight, type HemisphereLight,
 } from 'three'
 import { dayState, makeDayState, type DayState } from '../../lib/dayCycle'
@@ -74,6 +74,7 @@ export function Lighting() {
   const soundClock = useRef(0)
   const sunPos = useRef(new Vector3()).current
   const envTimer = useRef(99)
+  const bakedEnv = useRef({ sky: new Color(-1, -1, -1), ground: new Color(-1, -1, -1) })
   const lastLights = useRef(false)
 
   if (!scene.fog) scene.fog = new FogExp2('#c6d5d6', 0.0032)
@@ -165,11 +166,24 @@ export function Lighting() {
       const groundMat = envGround.material as MeshBasicMaterial
       skyMat.color.copy(day.fog).lerp(day.zenith, 0.45).multiplyScalar(0.55 + day.sunIntensity * 0.18)
       groundMat.color.copy(day.ambient).multiplyScalar(0.22 + (1 - day.night) * 0.3)
-      const target = pmrem.fromScene(envScene, 0.04)
-      const previous = scene.environment
-      scene.environment = target.texture
       scene.environmentIntensity = 0.55 + (1 - day.night) * 0.35
-      previous?.dispose()
+      // Baking the reflections renders six faces, blurs them and allocates a
+      // fresh GPU target: a stall a phone feels as a stutter. The day takes
+      // hours, so most two-second checks see no visible change; only re-bake
+      // when the sky or ground colour has really moved.
+      const baked = bakedEnv.current
+      const moved = Math.max(
+        Math.abs(skyMat.color.r - baked.sky.r), Math.abs(skyMat.color.g - baked.sky.g), Math.abs(skyMat.color.b - baked.sky.b),
+        Math.abs(groundMat.color.r - baked.ground.r), Math.abs(groundMat.color.g - baked.ground.g), Math.abs(groundMat.color.b - baked.ground.b),
+      )
+      if (!scene.environment || moved > 0.025) {
+        baked.sky.copy(skyMat.color)
+        baked.ground.copy(groundMat.color)
+        const target = pmrem.fromScene(envScene, 0.04)
+        const previous = scene.environment
+        scene.environment = target.texture
+        previous?.dispose()
+      }
     }
   })
 

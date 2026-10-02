@@ -53,13 +53,15 @@ export function AutoColliders() {
       const mat = (Array.isArray(m.material) ? m.material[0] : m.material) as Material
       if (!mat || mat.transparent) return
       live.add(m)
-      m.getWorldPosition(_p)
-      let rec = seen.current.get(m)
+      const rec = seen.current.get(m)
+      if (rec?.done) return
+      // the world matrix the last frame rendered with; getWorldPosition would
+      // recompute every ancestor of every mesh on each scan, a stall on phones
+      _p.setFromMatrixPosition(m.matrixWorld)
       if (!rec) {
         seen.current.set(m, { at: _p.clone(), stable: 0, done: false, off: null })
         return
       }
-      if (rec.done) return
       // it has to hold still for two scans before it counts as fixed
       if (rec.at.distanceToSquared(_p) > 1e-4) { rec.at.copy(_p); rec.stable = 0; return }
       if (++rec.stable < 2) return
