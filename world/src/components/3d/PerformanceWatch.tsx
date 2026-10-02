@@ -64,17 +64,11 @@ export function PerformanceWatch() {
     setDpr(Math.min(window.devicePixelRatio, preset.dpr[1]))
   }, [preset, setDpr])
 
-  // shadows re-rendered every other frame: 30 updates a second is smooth to
-  // the eye, and the shadow pass is a second draw of everything that casts
-  useEffect(() => {
-    gl.shadowMap.autoUpdate = false
-    gl.shadowMap.needsUpdate = true
-    return () => { gl.shadowMap.autoUpdate = true }
-  }, [gl])
-  const frame = useRef(0)
-
+  // Shadows are re-rendered every frame. Every other frame halved their
+  // cost, but it made alternate frames heavy and light, so motion juddered,
+  // and the coach's shadow (and the sun's frame, which follows him) moved at
+  // half rate behind him: he looked as if he were lagging.
   useFrame((_, dt) => {
-    if ((frame.current++ & 1) === 0) gl.shadowMap.needsUpdate = true
     const a = acc.current
     a.t += dt
     a.frames++
