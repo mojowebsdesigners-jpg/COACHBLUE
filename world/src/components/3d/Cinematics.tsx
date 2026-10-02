@@ -163,6 +163,9 @@ export function Cinematics() {
       cameraOverride.pos.lerpVectors(_endPos, _path, wOut)
       cameraOverride.target.lerpVectors(_endLook, _look, wOut)
     }
+    // the blend runs in a straight line from wherever the camera was, which
+    // can cut through a hillside; keep the blended point clear as well
+    if (wIn < 1 || wOut < 1) keepClear(cameraOverride.pos, cameraOverride.target)
     cameraOverride.active = true
     cameraOverride.ease = 14        // follow the path, do not trail it
     if (k >= 1) {

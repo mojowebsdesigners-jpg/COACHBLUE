@@ -1,6 +1,6 @@
 import { MathUtils, Vector3, type PerspectiveCamera } from 'three'
 import { input } from '../lib/input'
-import { terrainHeight, sweepColliders } from '../lib/terrain'
+import { baseGround, terrainHeight, sweepColliders } from '../lib/terrain'
 import { player } from '../state/store'
 
 /**
@@ -197,6 +197,16 @@ export function stepCamera(
   smoothLook.y = MathUtils.damp(smoothLook.y, lookTarget.y, lookLag, dt)
   smoothLook.z = MathUtils.damp(smoothLook.z, lookTarget.z, lookLag, dt)
 
+  // Whatever is steering it (a cinematic blending in from the loading view,
+  // a map flight, photo mode), the camera never ends up under the ground:
+  // from below, the terrain and road are invisible and the world reads as an
+  // empty white haze until it climbs back out.
+  if (mode !== 'first') {
+    // the lower of the natural ground and what is built into it (the pool's
+    // basin, the gym slab), so a camera in the pool or under a deck stays put
+    const floor = Math.min(terrainHeight(smoothPos.x, smoothPos.z), baseGround(smoothPos.x, smoothPos.z)) + 0.35
+    if (smoothPos.y < floor) smoothPos.y = floor
+  }
   camera.position.copy(smoothPos)
   camera.lookAt(smoothLook)
 

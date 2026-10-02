@@ -317,6 +317,9 @@ export default function App() {
 
   useEffect(() => {
     if (phase === 'world') startAmbience()
+    // entering the world: the camera starts behind him on the first frame,
+    // not easing in from wherever the loading view left it
+    if (phase === 'world') resetCamera()
   }, [phase])
 
   return (
