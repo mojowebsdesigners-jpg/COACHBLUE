@@ -1,7 +1,5 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-// before anything builds a scene: static objects stop recomputing matrices
-import './lib/matrixCache'
 import App from './App.tsx'
 
 // the static content in index.html is for crawlers and no-JS visitors; the app
