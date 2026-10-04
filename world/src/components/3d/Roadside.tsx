@@ -169,6 +169,16 @@ function Billboard({
     }
   }, [content])
 
+  // a playing video uploads a new frame to the GPU every frame it plays:
+  // only while you are near enough to see it
+  useFrame(() => {
+    const v = videoRef.current
+    if (!v) return
+    const near = Math.hypot(player.pos.x - at.x, player.pos.z - at.z) < 70
+    if (!near && !v.paused) v.pause()
+    else if (near && v.paused) v.play().catch(() => {})
+  })
+
   useEffect(() => {
     addCollider({ x: at.x, z: at.z, r: 1 })
     if (content.kind === 'text' && content.href) {

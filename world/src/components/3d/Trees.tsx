@@ -158,12 +158,17 @@ function growTree(opts: {
   // sub-pixel.
   const farTips = tips.filter((_, i) => i % 3 === 0).map((t) => ({ pos: t.pos, size: t.size * 1.7 }))
   const leaves = cardGeometry(tips)
+  // and for far off, where the fog is already softening it: the trunk and a
+  // few big clusters, about a twelfth of the full tree
+  const farthest = tips.filter((_, i) => i % 8 === 0).map((t) => ({ pos: t.pos, size: t.size * 2.4 }))
   return {
     wood: limbGeometry(limbs),
     leaves: opts.leafSize > 0 ? leaves : null,
     woodLod: limbGeometry(limbs.filter((l) => l.depth <= 1), 4),
     // its own random stream: drawing from the world's would move every tree
     leavesLod: opts.leafSize > 0 ? cardGeometry(farTips, 3, lodRandom(tips.length)) : null,
+    woodFar: limbGeometry(limbs.filter((l) => l.depth <= 0), 3),
+    leavesFar: opts.leafSize > 0 ? cardGeometry(farthest, 2, lodRandom(tips.length + 7)) : null,
   }
 }
 
@@ -222,16 +227,22 @@ function scatter(count: number, opts: { minPath: number; maxSlope: number; bias?
   return out
 }
 
-type Variant = { wood: BufferGeometry; leaves: BufferGeometry | null; woodLod: BufferGeometry; leavesLod: BufferGeometry | null }
+type Variant = {
+  wood: BufferGeometry; leaves: BufferGeometry | null; woodLod: BufferGeometry; leavesLod: BufferGeometry | null
+  woodFar: BufferGeometry; leavesFar: BufferGeometry | null
+}
 
 function Species({ v, spots, collide }: { v: Variant; spots: Spot[]; collide: boolean }) {
   const { wood, woodLod } = v
   const leaves = v.leaves && v.leavesLod ? v.leaves : null
   const leavesLod = leaves ? v.leavesLod : null
+  const leavesFar = leaves ? v.leavesFar : null
   const woodRef = useRef<InstancedMesh>(null)
   const leafRef = useRef<InstancedMesh>(null)
   const woodLodRef = useRef<InstancedMesh>(null)
   const leafLodRef = useRef<InstancedMesh>(null)
+  const woodFarRef = useRef<InstancedMesh>(null)
+  const leafFarRef = useRef<InstancedMesh>(null)
   const barkMat = useMemo(() => scanned('bark', 2, { roughness: 0.95 }), [])
   const leafMat = useMemo(
     () => applyWind(foliage('leafcluster', {
@@ -261,9 +272,16 @@ function Species({ v, spots, collide }: { v: Variant; spots: Spot[]; collide: bo
     // draw only the trees that can be seen (or can shade what is seen), and
     // the simpler stand-in for those further off
     const lodFrom = useStore.getState().preset.treeLod
-    const offs = ([[woodRef.current, woodLodRef.current], [leafRef.current, leafLodRef.current]] as const)
+    const offs = ([
+      [woodRef.current, woodLodRef.current, woodFarRef.current],
+      [leafRef.current, leafLodRef.current, leafFarRef.current],
+    ] as const)
       .filter(([m]) => m)
-      .map(([m, lod]) => registerInstanceCull(m!, 45, lod ? { mesh: lod, from: lodFrom } : null))
+      .map(([m, lod, far]) => registerInstanceCull(
+        m!, 45,
+        lod ? { mesh: lod, from: lodFrom } : null,
+        far ? { mesh: far, from: lodFrom * 2.2 } : null,
+      ))
     return () => offs.forEach((o) => o())
   }, [spots, collide])
 
@@ -271,12 +289,19 @@ function Species({ v, spots, collide }: { v: Variant; spots: Spot[]; collide: bo
   return (
     <>
       <instancedMesh ref={woodRef} args={[wood, barkMat, spots.length]} castShadow receiveShadow frustumCulled={false} />
-      <instancedMesh ref={woodLodRef} args={[woodLod, barkMat, spots.length]} count={0} castShadow receiveShadow frustumCulled={false} />
+      {/* the far stand-ins cast no shadow: the sun's shadow only covers the
+          few dozen metres round him, and without this every distant tree in
+          view was drawn a second time for nothing */}
+      <instancedMesh ref={woodLodRef} args={[woodLod, barkMat, spots.length]} count={0} receiveShadow frustumCulled={false} />
       {leaves && (
         <instancedMesh ref={leafRef} args={[leaves, leafMat, spots.length]} castShadow receiveShadow frustumCulled={false} />
       )}
       {leavesLod && (
-        <instancedMesh ref={leafLodRef} args={[leavesLod, leafMat, spots.length]} count={0} castShadow receiveShadow frustumCulled={false} />
+        <instancedMesh ref={leafLodRef} args={[leavesLod, leafMat, spots.length]} count={0} receiveShadow frustumCulled={false} />
+      )}
+      <instancedMesh ref={woodFarRef} args={[v.woodFar, barkMat, spots.length]} count={0} frustumCulled={false} />
+      {leavesFar && (
+        <instancedMesh ref={leafFarRef} args={[leavesFar, leafMat, spots.length]} count={0} frustumCulled={false} />
       )}
     </>
   )

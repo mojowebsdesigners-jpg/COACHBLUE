@@ -5,6 +5,7 @@ import {
   InstancedMesh, MeshStandardMaterial, Object3D, PlaneGeometry, Vector3,
 } from 'three'
 import { foliage, scanned, scannedTexture } from '../../lib/materials'
+import { detail } from '../../lib/detail'
 import {
   PATH_HALF_WIDTH, TERRAIN_SIZE, pathDistance, pathSamples, roadBase, streamDistanceAt,
   terrainHeight, terrainNormalY, POOL, poolFloorAt, poolLocal, forestDensity, isGrassCleared, lakeEdgeDistance,
@@ -366,9 +367,13 @@ export function GrassCover() {
       const v = 0.82 + slotRand(i, 7) * 0.33
       mesh.setColorAt(i, tint.setRGB(v * 0.93, v * 0.9, v * 0.74))
     }
-    mesh.count = count
+    // upload only the slice just laid, not the whole field every frame
+    mesh.instanceMatrix.addUpdateRange(from * 16, (to - from) * 16)
     mesh.instanceMatrix.needsUpdate = true
-    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true
+    if (mesh.instanceColor) {
+      mesh.instanceColor.addUpdateRange(from * 3, (to - from) * 3)
+      mesh.instanceColor.needsUpdate = true
+    }
   }
 
   useEffect(() => {
@@ -380,9 +385,15 @@ export function GrassCover() {
     const mesh = ref.current
     if (!mesh) return
 
+    // A lighter detail level draws a share of the tufts. Placement is
+    // random, so the first N are an even thinning; only those N are laid at
+    // all, and if the level rises again the sweep simply carries on to the
+    // new N round the same centre.
+    const active = Math.max(1, Math.round(count * detail.grass))
+
     // start a fresh sweep once the player has walked far enough, or when
     // something (a tyre) has pressed the grass down
-    if (cursor.current >= count && (player.pos.distanceTo(centre.current) > radius * 0.3 || grassRefresh.wanted)) {
+    if (cursor.current >= active && (player.pos.distanceTo(centre.current) > radius * 0.3 || grassRefresh.wanted)) {
       grassRefresh.wanted = false
       centre.current.set(player.pos.x, 0, player.pos.z)
       cursor.current = 0
@@ -391,12 +402,12 @@ export function GrassCover() {
     // milliseconds every few metres walked. A slice per frame spreads the same
     // work over a fraction of a second, which reads as tufts settling in
     // rather than as the world stopping.
-    if (cursor.current < count) {
-      const next = Math.min(count, cursor.current + SLICE)
+    if (cursor.current < active) {
+      const next = Math.min(active, cursor.current + SLICE)
       placeSlice(centre.current.x, centre.current.z, cursor.current, next)
       cursor.current = next
-      if (cursor.current >= count) mesh.computeBoundingSphere()
     }
+    mesh.count = active
   })
 
   return (

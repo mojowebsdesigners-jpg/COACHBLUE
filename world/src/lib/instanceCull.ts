@@ -1,4 +1,5 @@
-import { Frustum, Matrix4, Sphere, Vector3, type Camera, type InstancedMesh } from 'three'
+import { Frustum, InstancedBufferAttribute, InstancedMesh, Matrix4, Sphere, Vector3, type Camera } from 'three'
+import { detail } from './detail'
 
 /**
  * Per-instance culling for instanced meshes that are scattered over the whole
@@ -23,8 +24,12 @@ type Entry = {
   spheres: Float32Array
   total: number
   near: number
+  /** small things (under 2 m) follow the detail level's small-vegetation range */
+  small: boolean
   /** a cheaper stand-in drawn for the instances beyond `from` metres */
   lod: { mesh: InstancedMesh; from: number } | null
+  /** an even cheaper stand-in still further out (trees only) */
+  lod2: { mesh: InstancedMesh; from: number } | null
 }
 
 const entries = new Set<Entry>()
@@ -37,6 +42,8 @@ const _last = new Vector3(1e9, 0, 0)
 const _lastDir = new Vector3()
 const _dir = new Vector3()
 let clock = 0
+/** shadow-casting instances further than this are drawn by a non-casting twin */
+const SHADOW_RANGE = 35
 /**
  * Beyond this, an instance is lost in the fog and not drawn at all. Trees a
  * quarter of a mile off are a few hazy pixels each but still cost their full
@@ -56,6 +63,7 @@ export function setInstanceFar(d: number) {
  */
 export function registerInstanceCull(
   mesh: InstancedMesh, near = 45, lod: { mesh: InstancedMesh; from: number } | null = null,
+  lod2: { mesh: InstancedMesh; from: number } | null = null,
 ) {
   const total = mesh.count
   const matrices = new Float32Array(mesh.instanceMatrix.array.slice(0, total * 16))
@@ -69,7 +77,30 @@ export function registerInstanceCull(
     _s.copy(local).applyMatrix4(_m)
     spheres.set([_s.center.x, _s.center.y, _s.center.z, _s.radius], i * 4)
   }
-  const e: Entry = { mesh, matrices, colors, spheres, total, near, lod }
+  // A shadow-casting field with no stand-in of its own gets a twin that
+  // draws the same instances without a shadow: only those within the sun's
+  // shadow range (a few dozen metres round him) need to cast, and every
+  // distant bush and rock in view was otherwise drawn a second time.
+  let twin: InstancedMesh | null = null
+  if (!lod && mesh.castShadow && mesh.parent) {
+    twin = new InstancedMesh(mesh.geometry, mesh.material, total)
+    twin.castShadow = false
+    twin.receiveShadow = mesh.receiveShadow
+    twin.renderOrder = mesh.renderOrder
+    twin.layers.mask = mesh.layers.mask
+    if (colors) twin.instanceColor = new InstancedBufferAttribute(new Float32Array(total * 3), 3)
+    mesh.parent.add(twin)
+    lod = { mesh: twin, from: SHADOW_RANGE }
+  }
+  let rsum = 0
+  for (let i = 0; i < total; i++) rsum += spheres[i * 4 + 3]
+  const small = total > 0 && rsum / total < 2
+  if (lod2) {
+    lod2.mesh.instanceMatrix.setUsage(35048)
+    lod2.mesh.frustumCulled = false
+    lod2.mesh.count = 0
+  }
+  const e: Entry = { mesh, matrices, colors, spheres, total, near, lod, lod2, small }
   entries.add(e)
   // the compacted buffer is re-uploaded often; say so
   mesh.instanceMatrix.setUsage(35048)   // DynamicDrawUsage
@@ -88,6 +119,8 @@ export function registerInstanceCull(
     mesh.count = total
     mesh.instanceMatrix.needsUpdate = true
     if (lod) lod.mesh.count = 0
+    if (lod2) lod2.mesh.count = 0
+    if (twin) { twin.removeFromParent(); twin.dispose() }
   }
 }
 
@@ -112,9 +145,12 @@ export function hideInstance(mesh: InstancedMesh, index: number) {
 }
 
 /** Run from the render loop. Cheap: a few thousand sphere tests, a few times a second. */
+let lastLevel = 0
 export function updateInstanceCulling(camera: Camera, dt: number) {
   if (!entries.size) return
   clock += dt
+  // the detail level moved: re-cull now with the new distances
+  if (detail.level !== lastLevel) { lastLevel = detail.level; _last.set(1e9, 0, 0) }
   camera.getWorldPosition(_c)
   camera.getWorldDirection(_dir)
   const moved = _c.distanceToSquared(_last) > 1.5 * 1.5 || _dir.dot(_lastDir) < 0.995
@@ -133,17 +169,32 @@ export function updateInstanceCulling(camera: Camera, dt: number) {
     const out = e.mesh.instanceMatrix.array as Float32Array
     const outC = e.mesh.instanceColor?.array as Float32Array | undefined
     const outL = e.lod?.mesh.instanceMatrix.array as Float32Array | undefined
-    const lodFrom = e.lod ? e.lod.from : Infinity
-    let n = 0, nl = 0
+    const outLC = e.lod?.mesh.instanceColor?.array as Float32Array | undefined
+    // a tree stand-in follows the detail level; a shadow twin does not
+    const lodFrom = e.lod ? (e.lod.from === SHADOW_RANGE ? SHADOW_RANGE : e.lod.from * detail.treeLod) : Infinity
+    const cut = Math.min(far, detail.far, e.small ? detail.smallVeg : Infinity)
+    const outL2 = e.lod2?.mesh.instanceMatrix.array as Float32Array | undefined
+    const lod2From = e.lod2 ? e.lod2.from * detail.treeLod : Infinity
+    let n = 0, nl = 0, nl2 = 0
     for (let i = 0; i < e.total; i++) {
       const k = i * 4
       _s.center.set(e.spheres[k], e.spheres[k + 1], e.spheres[k + 2])
       _s.radius = e.spheres[k + 3]
       const d = _s.center.distanceTo(_c) - _s.radius
-      if (d > far) continue
-      if (d > e.near && !_f.intersectsSphere(_s)) continue
+      if (d > cut) continue
+      const inView = _f.intersectsSphere(_s)
+      if (d > e.near && !inView) continue
+      if (outL2 && d > lod2From) {
+        if (!inView) continue
+        outL2.set(e.matrices.subarray(i * 16, i * 16 + 16), nl2 * 16)
+        nl2++
+        continue
+      }
       if (outL && d > lodFrom) {
+        // the stand-in casts no shadow, so out of view it has no reason to draw
+        if (!inView) continue
         outL.set(e.matrices.subarray(i * 16, i * 16 + 16), nl * 16)
+        if (outLC && e.colors) outLC.set(e.colors.subarray(i * 3, i * 3 + 3), nl * 3)
         nl++
         continue
       }
@@ -152,12 +203,25 @@ export function updateInstanceCulling(camera: Camera, dt: number) {
       n++
     }
     e.mesh.count = n
+    if (e.lod2) {
+      const lm = e.lod2.mesh
+      lm.count = nl2
+      lm.instanceMatrix.clearUpdateRanges()
+      lm.instanceMatrix.addUpdateRange(0, Math.max(16, nl2 * 16))
+      lm.instanceMatrix.needsUpdate = true
+    }
     if (e.lod) {
       const lm = e.lod.mesh
       lm.count = nl
       lm.instanceMatrix.clearUpdateRanges()
       lm.instanceMatrix.addUpdateRange(0, Math.max(16, nl * 16))
       lm.instanceMatrix.needsUpdate = true
+      if (outLC) {
+        const lc = lm.instanceColor!
+        lc.clearUpdateRanges()
+        lc.addUpdateRange(0, Math.max(3, nl * 3))
+        lc.needsUpdate = true
+      }
     }
     // upload only the part of the buffer in use
     const im = e.mesh.instanceMatrix

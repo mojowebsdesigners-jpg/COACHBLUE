@@ -199,7 +199,9 @@ export function Player() {
   const { clone, animations } = useCoachModel()
   // the player is never culled: the camera is always on him, and a bounding
   // sphere that lags a pose (lying down, climbing) must not make him vanish
-  useMemo(() => clone.traverse((o) => { if ((o as SkinnedMesh).isSkinnedMesh) o.frustumCulled = false }), [clone])
+  useMemo(() => clone.traverse((o) => {
+    if ((o as SkinnedMesh).isSkinnedMesh) { o.frustumCulled = false; o.userData.noCull = true }
+  }), [clone])
   const { actions, mixer } = useAnimations(animations, clone)
   const view = useStore((s) => s.view)
   const soundOn = useStore((s) => s.settings.sound)

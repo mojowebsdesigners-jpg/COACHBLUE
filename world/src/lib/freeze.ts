@@ -1,6 +1,6 @@
 import { useLayoutEffect, type RefObject } from 'react'
 import type { Object3D } from 'three'
-import { BufferGeometry, Material, Matrix4, Mesh } from 'three'
+import { BufferGeometry, DoubleSide, Material, Matrix4, Mesh } from 'three'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 
 
@@ -61,7 +61,11 @@ export function batchStatic(root: Object3D) {
     if (dyn || !m.visible || m.morphTargetInfluences) return
     const g = m.geometry as BufferGeometry
     const sig = Object.keys(g.attributes).sort().join(',') + (g.index ? '|i' : '|n')
-    const key = `${(m.material as Material).uuid}|${sig}|${m.castShadow ? 1 : 0}${m.receiveShadow ? 1 : 0}|${m.renderOrder}`
+    // grouped by 80 m cell as well as material: one merge spanning the whole
+    // road is always partly in view, so every vertex of it was drawn every
+    // frame; per cell, the parts out of view are skipped as before
+    const cell = `${Math.floor(m.matrixWorld.elements[12] / 80)},${Math.floor(m.matrixWorld.elements[14] / 80)}`
+    const key = `${(m.material as Material).uuid}|${sig}|${m.castShadow ? 1 : 0}${m.receiveShadow ? 1 : 0}|${m.renderOrder}|${cell}`
     let e = groups.get(key)
     if (!e) groups.set(key, (e = { mat: m.material as Material, meshes: [] }))
     e.meshes.push(m)
@@ -110,6 +114,14 @@ export function harmonizeMaterials(root: Object3D) {
     }
   })
   let fixed = 0
+  // A transparent, double-sided material is drawn twice a frame by three.js
+  // (back faces, then front), flagging itself for a shader re-check on each
+  // pass. For the flat glows, rings, sprites and water here that ordering is
+  // invisible, so they are drawn once.
+  for (const mat of users.keys()) {
+    const m = mat as Material & { forceSinglePass?: boolean }
+    if (m.transparent && m.side === DoubleSide && !m.forceSinglePass) { m.forceSinglePass = true; fixed++ }
+  }
   for (const [mat, meshes] of users) {
     if (meshes.length < 2) continue
     if (meshes.some((m) => m.receiveShadow) && meshes.some((m) => !m.receiveShadow)) {

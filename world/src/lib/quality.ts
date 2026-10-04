@@ -27,22 +27,22 @@ export const PRESETS: Record<ResolvedTier, Preset> = {
   ultra: {
     name: 'ultra', dpr: [1, 2], shadows: true, shadowSize: 2048, trees: 2600, grass: 30000,
     grassRadius: 22, rocks: 110, motes: 520, leaves: 220, birds: true, post: true,
-    depthOfField: true, drawDistance: 0.85, streamLoadRadius: 1.15, treeLod: 90,
+    depthOfField: true, drawDistance: 0.85, streamLoadRadius: 1.15, treeLod: 70,
   },
   high: {
     name: 'high', dpr: [1, 1.75], shadows: true, shadowSize: 2048, trees: 2100, grass: 24000,
     grassRadius: 18, rocks: 90, motes: 400, leaves: 140, birds: true, post: true,
-    depthOfField: false, drawDistance: 1, streamLoadRadius: 1, treeLod: 70,
+    depthOfField: false, drawDistance: 1, streamLoadRadius: 1, treeLod: 55,
   },
   medium: {
     name: 'medium', dpr: [1, 1.4], shadows: true, shadowSize: 1024, trees: 1400, grass: 12000,
     grassRadius: 14, rocks: 60, motes: 220, leaves: 70, birds: true, post: false,
-    depthOfField: false, drawDistance: 1.15, streamLoadRadius: 0.85, treeLod: 55,
+    depthOfField: false, drawDistance: 1.15, streamLoadRadius: 0.85, treeLod: 40,
   },
   low: {
     name: 'low', dpr: [0.8, 1.15], shadows: false, shadowSize: 512, trees: 700, grass: 4000,
     grassRadius: 10, rocks: 30, motes: 90, leaves: 0, birds: false, post: false,
-    depthOfField: false, drawDistance: 1.35, streamLoadRadius: 0.7, treeLod: 40,
+    depthOfField: false, drawDistance: 1.35, streamLoadRadius: 0.7, treeLod: 30,
   },
 }
 
@@ -104,7 +104,7 @@ function forHandheld(p: Preset): Preset {
       grassRadius: Math.min(p.grassRadius, 12),
       motes: Math.round(p.motes * 0.5),
       leaves: Math.round(p.leaves * 0.5),
-      treeLod: Math.min(p.treeLod, 40),
+      treeLod: Math.min(p.treeLod, 30),
     }
     handheldCache.set(p.name, t)
   }

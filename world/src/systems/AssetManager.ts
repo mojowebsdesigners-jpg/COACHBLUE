@@ -1,5 +1,6 @@
 import { useGLTF } from '@react-three/drei'
 import { Texture, type Camera, type Mesh, type Object3D, type Scene, type VideoTexture, type WebGLRenderer } from 'three'
+import { harmonizeMaterials } from '../lib/freeze'
 
 /**
  * Everything the world is built from, fetched before the world is shown.
@@ -42,6 +43,9 @@ export async function warmShaders(gl: WebGLRenderer, scene: Scene, camera: Camer
   // compiling only sees what is visible, and distance culling has already
   // hidden the far side of the world: show everything for the compile, so
   // nothing has to be compiled (a freeze of seconds) the first time it is seen
+  // settle shared materials (and single-pass transparency) first, so the
+  // variants compiled here are the ones the world will actually draw
+  harmonizeMaterials(scene)
   const hidden: Object3D[] = []
   scene.traverse((o) => { if (!o.visible) { hidden.push(o); o.visible = true } })
   try {
