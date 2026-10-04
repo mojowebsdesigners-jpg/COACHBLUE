@@ -74,7 +74,8 @@ export function Lighting() {
   const soundClock = useRef(0)
   const sunPos = useRef(new Vector3()).current
   const envTimer = useRef(99)
-  const bakedEnv = useRef({ sky: new Color(-1, -1, -1), ground: new Color(-1, -1, -1) })
+  const wasInWorld = useRef(false)
+  const bakedEnv = useRef({ sky: new Color(-1, -1, -1), ground: new Color(-1, -1, -1), age: 0, playBakes: 0 })
   const lastLights = useRef(false)
 
   if (!scene.fog) scene.fog = new FogExp2('#c6d5d6', 0.0032)
@@ -160,6 +161,11 @@ export function Lighting() {
     }
 
     envTimer.current += dt
+    // the first frame of play re-bakes at once, rather than showing whatever
+    // the loading-time bake left for up to two seconds
+    const inWorld = useStore.getState().phase === 'world'
+    if (inWorld && !wasInWorld.current) envTimer.current = 99
+    wasInWorld.current = inWorld
     if (envTimer.current > 2) {
       envTimer.current = 0
       const skyMat = envSky.material as MeshBasicMaterial
@@ -168,15 +174,23 @@ export function Lighting() {
       groundMat.color.copy(day.ambient).multiplyScalar(0.22 + (1 - day.night) * 0.3)
       scene.environmentIntensity = 0.55 + (1 - day.night) * 0.35
       // Baking the reflections renders six faces, blurs them and allocates a
-      // fresh GPU target: a stall a phone feels as a stutter. The day takes
-      // hours, so most two-second checks see no visible change; only re-bake
-      // when the sky or ground colour has really moved.
+      // fresh GPU target: a small stall, so it is not repeated every two
+      // seconds for a sky that takes hours to change. But a bake must never be
+      // trusted for long either: on some graphics drivers a bake made while
+      // the world is still loading comes out corrupt, and every lit surface
+      // then renders as white haze. So it is redone during the first seconds
+      // of play, every half minute after that, and whenever the colours move.
       const baked = bakedEnv.current
+      baked.age += 2
+      const playing = inWorld
       const moved = Math.max(
         Math.abs(skyMat.color.r - baked.sky.r), Math.abs(skyMat.color.g - baked.sky.g), Math.abs(skyMat.color.b - baked.sky.b),
         Math.abs(groundMat.color.r - baked.ground.r), Math.abs(groundMat.color.g - baked.ground.g), Math.abs(groundMat.color.b - baked.ground.b),
       )
-      if (!scene.environment || moved > 0.025) {
+      const early = playing && baked.playBakes < 3
+      if (!scene.environment || moved > 0.025 || early || baked.age >= 30) {
+        if (playing) baked.playBakes++
+        baked.age = 0
         baked.sky.copy(skyMat.color)
         baked.ground.copy(groundMat.color)
         const target = pmrem.fromScene(envScene, 0.04)
