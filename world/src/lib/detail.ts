@@ -27,9 +27,9 @@ type Level = {
 
 export const LEVELS: Level[] = [
   { treeLod: 1, grass: 1, smallRange: 90, far: Infinity, peopleRange: 60, smallVeg: 150, shadowRange: 30 },
-  { treeLod: 0.75, grass: 0.7, smallRange: 70, far: 320, peopleRange: 48, smallVeg: 110, shadowRange: 24 },
-  { treeLod: 0.55, grass: 0.45, smallRange: 55, far: 240, peopleRange: 38, smallVeg: 80, shadowRange: 18 },
-  { treeLod: 0.4, grass: 0.25, smallRange: 42, far: 180, peopleRange: 30, smallVeg: 60, shadowRange: 14 },
+  { treeLod: 0.75, grass: 0.7, smallRange: 70, far: 420, peopleRange: 48, smallVeg: 110, shadowRange: 24 },
+  { treeLod: 0.55, grass: 0.45, smallRange: 55, far: 340, peopleRange: 38, smallVeg: 80, shadowRange: 18 },
+  { treeLod: 0.4, grass: 0.25, smallRange: 42, far: 260, peopleRange: 30, smallVeg: 60, shadowRange: 14 },
 ]
 
 export const detail = { level: 0, ...LEVELS[0] }

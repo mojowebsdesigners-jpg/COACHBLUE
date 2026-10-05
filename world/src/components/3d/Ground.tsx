@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import {
   BufferAttribute, BufferGeometry, Color, DoubleSide, Float32BufferAttribute,
-  InstancedMesh, MeshStandardMaterial, Object3D, PlaneGeometry, Vector3,
+  InstancedMesh, Mesh, MeshStandardMaterial, Object3D, PlaneGeometry, Vector3,
 } from 'three'
 import { foliage, scanned, scannedTexture } from '../../lib/materials'
 import { detail } from '../../lib/detail'
@@ -92,8 +92,33 @@ export function Ground() {
     g.setAttribute('blendWeights', new BufferAttribute(blend, 3))
     g.setAttribute('groundUv', new BufferAttribute(uv2, 2))
     g.computeVertexNormals()
-    return g
+    const tiles = buildTiles(g, seg)
+    g.dispose()
+    return tiles
   }, [])
+
+  // each tile shows the detail its distance calls for, re-judged a few
+  // times a second; off-screen tiles are skipped by the usual frustum test
+  const tileRefs = useRef<(Mesh | null)[]>([])
+  const clock = useRef(0)
+  useFrame(({ camera }, dt) => {
+    clock.current -= dt
+    if (clock.current > 0) return
+    clock.current = 0.2
+    const cx = camera.position.x, cz = camera.position.z
+    // never coarser than this close in: the road and the pool deck are cut
+    // into the ground, and only the full grid follows those cuts exactly
+    const s = Math.max(0.7, detail.treeLod)
+    const near = TILE_FULL * s, mid = TILE_MID * s
+    for (const t of geometry) {
+      const d = Math.max(0, Math.hypot(t.x - cx, t.z - cz) - t.half)
+      const want = d < near ? 0 : d < mid ? 1 : 2
+      for (let k = 0; k < 3; k++) {
+        const m = tileRefs.current[t.index * 3 + k]
+        if (m) m.visible = k === want
+      }
+    }
+  })
 
   const material = useMemo(() => {
     // a real normal map has to be present for three to build the tangent frame;
@@ -150,7 +175,93 @@ export function Ground() {
     return m
   }, [uniforms])
 
-  return <mesh geometry={geometry} material={material} receiveShadow />
+  return (
+    <group>
+      {geometry.flatMap((t) => t.lods.map((g, k) => (
+        <mesh
+          key={`${t.index}-${k}`}
+          ref={(m) => { tileRefs.current[t.index * 3 + k] = m }}
+          geometry={g} material={material} receiveShadow visible={k === 0}
+          userData={{ noCull: true, noBatch: true }}
+        />
+      )))}
+    </group>
+  )
+}
+
+/**
+ * The ground used to be one 320 x 320 mesh: two hundred thousand triangles
+ * drawn in full every frame, hills behind the camera included. Cut into an
+ * 8 x 8 grid of tiles, each in three densities (every point, every second,
+ * every fourth), the parts out of view are skipped and the far hills cost a
+ * sixteenth. Every density is taken from the same points of the same grid,
+ * with the same normals and blend weights, so a tile looks the same at any
+ * of them; a short skirt hangs from each tile's edge so where a fine tile
+ * meets a coarse one there is ground, not a gap.
+ */
+const TILES = 8
+const TILE_FULL = 110   // metres: full grid closer than this
+const TILE_MID = 240    // half density closer than this, quarter beyond
+const SKIRT = 2.5
+
+type Tile = { index: number; x: number; z: number; half: number; lods: BufferGeometry[] }
+
+function buildTiles(full: BufferGeometry, seg: number): Tile[] {
+  const n = seg + 1
+  const per = seg / TILES
+  const names = ['position', 'normal', 'uv', 'blendWeights', 'groundUv'] as const
+  const src = names.map((nm) => full.attributes[nm] as BufferAttribute)
+  const tiles: Tile[] = []
+  for (let ty = 0; ty < TILES; ty++) {
+    for (let tx = 0; tx < TILES; tx++) {
+      const lods: BufferGeometry[] = []
+      for (const stride of [1, 2, 4]) {
+        const m = per / stride + 1
+        const grid: number[] = []
+        for (let j = 0; j < m; j++) for (let i = 0; i < m; i++) {
+          grid.push((ty * per + j * stride) * n + (tx * per + i * stride))
+        }
+        // the edge, walked once round, for the skirt
+        const ring: number[] = []
+        for (let i = 0; i < m - 1; i++) ring.push(i)
+        for (let j = 0; j < m - 1; j++) ring.push(j * m + (m - 1))
+        for (let i = m - 1; i > 0; i--) ring.push((m - 1) * m + i)
+        for (let j = m - 1; j > 0; j--) ring.push(j * m)
+        const count = grid.length + ring.length
+        const g = new BufferGeometry()
+        names.forEach((nm, a) => {
+          const at = src[a], k = at.itemSize
+          const arr = new Float32Array(count * k)
+          grid.forEach((v, o) => { for (let c = 0; c < k; c++) arr[o * k + c] = at.array[v * k + c] })
+          ring.forEach((r, o) => {
+            const v = grid[r]
+            for (let c = 0; c < k; c++) arr[(grid.length + o) * k + c] = at.array[v * k + c]
+            if (nm === 'position') arr[(grid.length + o) * k + 1] -= SKIRT
+          })
+          g.setAttribute(nm, new BufferAttribute(arr, k))
+        })
+        const idx: number[] = []
+        for (let j = 0; j < m - 1; j++) for (let i = 0; i < m - 1; i++) {
+          const a = j * m + i, b = (j + 1) * m + i, c = (j + 1) * m + i + 1, d = j * m + i + 1
+          idx.push(a, b, d, b, c, d)
+        }
+        // the skirt, both windings so it shows from either side
+        for (let o = 0; o < ring.length; o++) {
+          const top0 = ring[o], top1 = ring[(o + 1) % ring.length]
+          const bot0 = grid.length + o, bot1 = grid.length + ((o + 1) % ring.length)
+          idx.push(top0, bot0, top1, top1, bot0, bot1, top0, top1, bot0, top1, bot1, bot0)
+        }
+        g.setIndex(idx)
+        g.computeBoundingSphere()
+        lods.push(g)
+      }
+      const p = full.attributes.position as BufferAttribute
+      const c0 = (ty * per) * n + tx * per, c1 = ((ty + 1) * per) * n + (tx + 1) * per
+      const x = (p.getX(c0) + p.getX(c1)) / 2, z = (p.getZ(c0) + p.getZ(c1)) / 2
+      tiles.push({ index: ty * TILES + tx, x, z, half: Math.abs(p.getX(c1) - p.getX(c0)) * 0.71, lods })
+    }
+  }
+  return tiles
 }
 
 /**

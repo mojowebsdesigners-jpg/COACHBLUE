@@ -1,5 +1,5 @@
 import { useGLTF } from '@react-three/drei'
-import { Texture, type Camera, type Mesh, type Object3D, type Scene, type VideoTexture, type WebGLRenderer } from 'three'
+import { Texture, WebGLRenderTarget, type Camera, type InstancedMesh, type Mesh, type Object3D, type Scene, type VideoTexture, type WebGLRenderer } from 'three'
 import { harmonizeMaterials } from '../lib/freeze'
 
 /**
@@ -81,4 +81,47 @@ export async function warmShaders(gl: WebGLRenderer, scene: Scene, camera: Camer
     }
   })
   if (import.meta.env.DEV) console.log(`[warm] ${seen.size} textures uploaded`)
+  uploadGeometry(gl, scene, camera)
+}
+
+/**
+ * Put every mesh's vertex buffers on the GPU now. three.js uploads geometry
+ * the first time it is drawn, so a ground tile, a tree stand-in or a far
+ * version that first comes into view mid-walk stalls the frame while its
+ * buffers go up. Here each one is drawn once, with its own material, into a
+ * single hidden pixel, behind the splash screen.
+ */
+function uploadGeometry(gl: WebGLRenderer, scene: Scene, camera: Camera) {
+  // the real scene, so the lights, fog and reflections match and every
+  // program drawn is one already compiled: everything switched on, nothing
+  // culled, every instanced mesh drawing at least one instance
+  const shown: Object3D[] = []
+  const culled: Object3D[] = []
+  const counts: [InstancedMesh, number][] = []
+  scene.traverse((o) => {
+    if (!o.visible) { shown.push(o); o.visible = true }
+    const m = o as Mesh & { isInstancedMesh?: boolean }
+    if (!m.isMesh) return
+    if (m.frustumCulled) { culled.push(m); m.frustumCulled = false }
+    if (m.isInstancedMesh) {
+      const im = m as unknown as InstancedMesh
+      if (im.count === 0) { counts.push([im, 0]); im.count = 1 }
+    }
+  })
+  const target = new WebGLRenderTarget(1, 1)
+  const prev = gl.getRenderTarget()
+  const shadows = gl.shadowMap.autoUpdate
+  gl.shadowMap.autoUpdate = false
+  try {
+    gl.setRenderTarget(target)
+    gl.render(scene, camera)
+  } finally {
+    gl.setRenderTarget(prev)
+    gl.shadowMap.autoUpdate = shadows
+    target.dispose()
+    for (const o of shown) o.visible = false
+    for (const o of culled) o.frustumCulled = true
+    for (const [im, n] of counts) im.count = n
+  }
+  if (import.meta.env.DEV) console.log(`[warm] ${culled.length + counts.length} meshes drawn once to upload their buffers`)
 }
