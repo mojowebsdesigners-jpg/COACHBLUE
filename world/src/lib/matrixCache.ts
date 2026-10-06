@@ -41,3 +41,38 @@ Object3D.prototype.updateMatrix = function (this: Cached) {
   this.matrix.compose(p, q, s)
   this.matrixWorldNeedsUpdate = true
 }
+
+/**
+ * The other half. `getWorldPosition` and friends refresh one object's world
+ * matrix through `updateWorldMatrix(parents, children = false)`, which clears
+ * its dirty flag without touching its children. Stock three.js never noticed:
+ * every object re-flagged itself every frame. Here an object only flags itself
+ * when it moves, so a move picked up mid-frame by that path (the car's body,
+ * read for the driver and the door prompt) would never reach its children,
+ * and the car's model was left behind. Note it, and push it down on the next
+ * full pass.
+ */
+type Pending = Cached & { _mcChildren?: boolean }
+const _before = new Float64Array(16)
+const stockWorld = Object3D.prototype.updateWorldMatrix
+const stockMatrixWorld = Object3D.prototype.updateMatrixWorld
+
+Object3D.prototype.updateWorldMatrix = function (this: Pending, updateParents: boolean, updateChildren: boolean, force?: boolean) {
+  if (updateChildren === true || this.children.length === 0) {
+    stockWorld.call(this, updateParents, updateChildren, force)
+    return
+  }
+  // only when its world matrix really changed do the children need it
+  const e = this.matrixWorld.elements
+  _before.set(e)
+  stockWorld.call(this, updateParents, updateChildren, force)
+  for (let i = 0; i < 16; i++) if (e[i] !== _before[i]) { this._mcChildren = true; break }
+}
+
+Object3D.prototype.updateMatrixWorld = function (this: Pending, force?: boolean) {
+  if (this._mcChildren) {
+    this._mcChildren = false
+    force = true
+  }
+  stockMatrixWorld.call(this, force)
+}

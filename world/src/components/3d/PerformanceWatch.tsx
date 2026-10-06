@@ -11,6 +11,8 @@ import { LEVELS, detail, setDetailLevel } from '../../lib/detail'
 const TARGET_FPS = 57
 /** It never renders below this fraction of the tier's resolution. */
 const MIN_SCALE = 0.6
+/** dev only: ?record renders every frame at full quality for the video recorder */
+const RECORDING = import.meta.env.DEV && typeof location !== 'undefined' && new URLSearchParams(location.search).has('record')
 /** ...and only once the world is already at its lightest, this far */
 const LAST_SCALE = 0.5
 const floorScale = () => (detail.level >= LEVELS.length - 1 ? LAST_SCALE : MIN_SCALE)
@@ -40,10 +42,13 @@ export function PerformanceWatch() {
     return () => setRenderNow(null)
   }, [advance])
   // for profiling from the console: draw calls, triangles, object count
+  const setFrameloop = useThree((s) => s.setFrameloop)
   useEffect(() => {
     const w = window as unknown as { __cb?: Record<string, unknown> }
     w.__cb = { ...w.__cb, gl, scene, camera, setInstanceFar, detail }
-  }, [gl, scene, camera])
+    // dev builds: the frame-by-frame video recorder drives the loop itself
+    if (import.meta.env.DEV) w.__cb = { ...w.__cb, advance, setFrameloop }
+  }, [gl, scene, camera, advance, setFrameloop])
   // as the world streams in, keep shared materials on one shader variant each;
   // once it has settled a walk of the whole scene every few seconds is a
   // stutter on a phone for nothing, so it slows right down
@@ -73,6 +78,8 @@ export function PerformanceWatch() {
   // and the coach's shadow (and the sun's frame, which follows him) moved at
   // half rate behind him: he looked as if he were lagging.
   useFrame((_, dt) => {
+    // recording a video frame by frame: full quality, never adapted
+    if (RECORDING) return
     const a = acc.current
     a.t += dt
     a.frames++
